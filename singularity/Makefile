@@ -1,6 +1,8 @@
 # AWS resources.
 SHELL=/bin/bash
 AWS_APPLIANCE_TEMPLATE=singularity-cloudformation.yml
+AWS_APPLIANCE_IP=`aws cloudformation describe-stacks --stack-name filecoin-singularity-appliance-test | jq '.Stacks[].Outputs[]|select(.OutputKey=="PublicIP").OutputValue' -r`
+
 
 -include config.mk.gitignore
 
@@ -26,3 +28,6 @@ recreate_appliance: delete_appliance wait_delete_appliance create_appliance
 
 wait_delete_appliance:
 	aws cloudformation wait stack-delete-complete --stack-name filecoin-singularity-appliance-test
+
+verify_appliance:
+	ssh ubuntu@${AWS_APPLIANCE_IP} "tail -50 /var/log/cloud-init-output.log"
