@@ -30,4 +30,5 @@ wait_delete_appliance:
 	aws cloudformation wait stack-delete-complete --stack-name filecoin-singularity-appliance-test
 
 verify_appliance:
-	ssh ubuntu@${AWS_APPLIANCE_IP} "tail -50 /var/log/cloud-init-output.log"
+	ssh ubuntu@${AWS_APPLIANCE_IP} "grep 'EC2 instance inititalization COMPLETE' /var/log/cloud-init-output.log || exit 1"
+	ssh ubuntu@${AWS_APPLIANCE_IP} "cat /var/log/cloud-init-output.log"
