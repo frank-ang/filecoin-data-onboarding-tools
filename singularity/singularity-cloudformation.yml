@@ -1,0 +1,253 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: Singularity EC2 Appliance.
+
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    ParameterGroups: 
+      - 
+        Label: 
+          default: "Network Configuration"
+        Parameters: 
+          - VPC
+          - AZ
+          - SubnetId
+          - SecurityGroup
+      - 
+        Label: 
+          default: "Amazon EC2 Configuration"
+        Parameters: 
+          - InstanceType
+          - InstanceProfile
+          - KeyPair
+          - LatestUbuntuFocalAMI
+
+    ParameterLabels: 
+      VPC: 
+        default: "Which VPC ID should singularity be deployed to?"
+
+Parameters: 
+
+  VPC:
+    Description: VPC ID.
+    Type: AWS::EC2::VPC::Id
+    Default: vpc-0b66bf645342935b5
+    # Hardcoded
+
+  AZ:
+    Description: Availability Zone placement
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: ap-southeast-1a
+    # Hardcoded
+
+  SubnetId:
+    Description: Subnet ID placement
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-0728cf0c3c454fff1
+    # Hardcoded
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group ID
+    Default: sg-06788998bef10dbb7
+    # Hardcoded
+
+  KeyPair:
+    Description: Key Pair Name
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: mac2021
+    # Hardcoded
+
+  InstanceProfile:
+    Description: EC2 Instance Profile ARN
+    Type: String
+    Default: mySSMManagedInstance
+    # Hardcoded
+
+  LatestUbuntuFocalAMI:
+    Description: Ubuntu AMI
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/focal/stable/current/amd64/hvm/ebs-gp2/ami-id
+
+  InstanceType:
+    Description: EC2 Instance Type
+    Type: String
+    # Season to taste
+    Default: r5d.large
+    AllowedValues:
+      - r5d.large
+      - r5d.xlarge
+      - r5d.2xlarge
+      - r5d.4xlarge
+      - m5d.large
+      - m5d.xlarge
+      - m5d.2xlarge
+      - m5d.4xlarge
+      - c5d.large
+      - c5d.xlarge
+      - c5d.2xlarge
+      - c5d.4xlarge
+
+Resources:
+
+  SingularityInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+      - !Ref SecurityGroup
+      KeyName: !Ref KeyPair
+      InstanceType: !Ref InstanceType
+      AvailabilityZone: !Ref AZ
+      ImageId: !Ref LatestUbuntuFocalAMI
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp3
+            VolumeSize: 50 # season to taste
+      Tags:
+        - Key: Name
+          Value: singularity-test
+      IamInstanceProfile: !Ref InstanceProfile
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+
+          function my_trap() {
+            echo "UserData was unsuccessful!"
+            echo "ERROR while executing User Data. "
+            echo "Scheduling shutdown..." && shutdown -h +60
+            echo "Sending CloudFormation error signal"
+            ## TODO do not signal fail. Preserve failed instance for debugging.
+            ## /opt/aws/bin/cfn-signal -e 1 --stack ${AWS::StackName} --resource SingularityInstance --region ${AWS::Region}
+            /opt/aws/bin/cfn-signal --success true --stack ${AWS::StackName} --resource SingularityInstance --region ${AWS::Region}
+          }
+          trap 'my_trap' ERR
+
+          echo "## Installing Dependencies..."
+          cd /root
+          apt update
+          apt install -y git openssl rsync make jq unzip nfs-common
+          apt install -y software-properties-common
+          apt install -y sysstat iotop
+
+          # Cloudformation helper scripts on default python 3.8
+          wget --no-verbose -O /tmp/aws-cfn-bootstrap-py3-latest.tar.gz https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+          python3 -m easy_install --script-dir /opt/aws/bin /tmp/aws-cfn-bootstrap-py3-latest.tar.gz
+
+          # DUMP ENV
+          echo "Dumping environment..."
+          env
+          echo "HOME: $HOME"
+          echo "echo ~ : "`echo ~`
+          echo "file /root/.bashrc : "`file /root/.bashrc` 
+
+          # Node 16
+          ##curl -sL https://deb.nodesource.com/setup_16.x | sudo bash -
+          ##sudo apt -y install nodejs
+          ##npm install -g ipfs-car
+          echo "## Installing NVM..." 
+          # Install nvm (https://github.com/nvm-sh/nvm#install--update-script)
+          export HOME=/root
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
+          source /root/.bashrc
+
+          # Try dot sourcing nvm scripts again just in case.
+          export NVM_DIR="$HOME/.nvm"
+          . "$NVM_DIR/nvm.sh"
+          . "$NVM_DIR/bash_completion"
+
+          echo "## nvm version: "`nvm version`
+          echo "## Installing Node..." 
+          nvm install 16
+
+          echo "## which node: "`which node`
+          echo "## node --version: "`node --version`
+
+          # AWS CLI v2
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          ./aws/install
+
+          # Golang 1.18 and stream-commp
+          wget --no-verbose -c https://go.dev/dl/go1.18.3.linux-amd64.tar.gz
+          tar -C /usr/local/ -xzf go1.18.3.linux-amd64.tar.gz
+          echo 'export GOPATH=/root/go' >> ~/.bashrc
+          echo 'export GOBIN=$GOPATH/bin' >> ~/.bashrc
+          echo 'export GOROOT=/usr/local/go' >> ~/.bashrc
+          echo 'export PATH=$PATH:$GOPATH/bin:$GOROOT/bin' >> ~/.bashrc
+          # set envars, because sourcing .bashrc appears not to work in userdata.
+          export HOME=/root
+          export GOPATH=/root/go
+          export GOBIN=$GOPATH/bin
+          export GOROOT=/usr/local/go
+          export PATH=$PATH:$GOPATH/bin:$GOROOT/bin
+          go version
+          go install github.com/filecoin-project/go-fil-commp-hashhash/cmd/stream-commp@latest
+          echo "## which stream-commp:"`which stream-commp`
+
+          # Mount NVMe (SSD) instance store volume (Only for EC2 instance types that support it)
+          mkfs -t xfs /dev/nvme1n1
+          apt install -y xfsprogs
+          mkdir /local
+          mount /dev/nvme1n1 /local
+
+          # Repo
+          cd /root
+          git clone https://github.com/tech-greedy/singularity.git
+          cd singularity
+          npm ci
+          npm run build
+          npm link
+          npx singularity -h
+
+          # Install Singularity # TODO ERR 127 ? 
+          #npm i -g @techgreedy/singularity
+          #which singularity-prepare
+          #singularity-prepare -h
+
+          # Install Generate CAR dependency
+          cd /root
+          git clone https://github.com/tech-greedy/go-generate-car.git
+          cd go-generate-car
+          make
+
+          # Then copy the generated binary to override the existing one from the PATH for your node environment, i.e.
+          # singularity installed globally /home/user/.nvm/versions/node/v16.xx.x/lib/node_modules/.bin
+          # ls: cannot access '/root/.nvm/versions/node/v16.15.1/lib/node_modules/.bin': No such file or directory
+          # mv ./generate-car /root/singularity/node_modules/.bin
+
+          # singularity cloned locally ./node_modules/.bin
+          mv ./generate-car /root/singularity/node_modules/.bin
+
+          echo "## Singularity installed. Now running test script."
+
+          # Singularity init, run daemon, prep etc. Run a test script
+          cd $HOME
+          git clone https://github.com/frank-ang/singularity-integ-test.git
+          cd singularity-integ-test
+          git fetch
+          git switch test
+          cd ./singularity
+          nohup ./singularity-tests.sh >> singularity-tests.log 2>&1 &
+
+          # All done, signal success.
+          echo "## Signaling successful to CloudFormation."
+          /opt/aws/bin/cfn-signal --success true --stack ${AWS::StackName} --resource SingularityInstance --region ${AWS::Region}
+          echo "EC2 instance inititalization COMPLETE"
+
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT10M
+
+Outputs:
+  InstanceId:
+    Description: InstanceId of the singularity EC2 instance
+    Value:
+      Ref: SingularityInstance
+  PublicIP:
+    Description: Public IP address of the singularity EC2 instance
+    Value:
+      Fn::GetAtt:
+      - SingularityInstance
+      - PublicIp
