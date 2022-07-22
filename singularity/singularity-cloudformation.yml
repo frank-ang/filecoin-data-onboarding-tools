@@ -231,6 +231,8 @@ Resources:
           cd ./singularity
           nohup ./singularity-tests.sh >> singularity-tests.log 2>&1 &
 
+          nohup ../lotus/lotus-init-devnet.sh >> lotus-init-devnet.log 2>&1 &
+
           # All done, signal success.
           echo "## Signaling successful to CloudFormation."
           /opt/aws/bin/cfn-signal --success true --stack ${AWS::StackName} --resource SingularityInstance --region ${AWS::Region}
