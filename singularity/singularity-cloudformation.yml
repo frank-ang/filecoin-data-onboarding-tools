@@ -232,7 +232,7 @@ Resources:
           nohup ./singularity-tests.sh >> ../singularity-tests.log 2>&1 &
 
           # Lotus build, init, start daemon, verify.
-          cd ../lotus
+          cd $HOME/singularity-integ-test/lotus
           nohup ./lotus-init-devnet.sh >> ../lotus-init-devnet.log 2>&1 &
 
           # All done, signal success.

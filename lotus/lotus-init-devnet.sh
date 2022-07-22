@@ -38,7 +38,6 @@ which lotus && lotus --version
 
 echo "## Starting lotus daemon..."
 nohup lotus daemon >> lotus-daemon.log 2>&1 &
-ls $HOME/.lotus
 
 echo "## Awaiting lotus startup..."
 sleep 2
@@ -53,3 +52,5 @@ done
 echo "## Creating wallet..."
 lotus wallet new
 lotus wallet list
+
+echo "## Lotus setup completed."

@@ -32,8 +32,7 @@ connect_verify:
 	ssh ubuntu@${AWS_APPLIANCE_IP} "grep 'EC2 instance inititalization COMPLETE' /var/log/cloud-init-output.log || exit 1" \
 	&& ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep 'PREP_STATUS: completed' /root/singularity-integ-test/singularity-tests.log || exit 1" \
 	&& ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep '## Building lotus' /root/singularity-integ-test/lotus-init-devnet.log || exit 1" \
-	&& ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep '## Starting lotus daemon' /root/singularity-integ-test/lotus-init-devnet.log || exit 1" \
-	&& ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep '## Creating wallet' /root/singularity-integ-test/lotus-init-devnet.log || exit 1"
+	&& ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep '## Lotus setup completed.' /root/singularity-integ-test/lotus-init-devnet.log || exit 1"
 	@echo "verification completed."
 
 connect:
