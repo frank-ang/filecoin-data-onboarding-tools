@@ -32,7 +32,7 @@ wait_delete_appliance:
 connect_verify:
 	ssh ubuntu@${AWS_APPLIANCE_IP} "grep 'EC2 instance inititalization COMPLETE' /var/log/cloud-init-output.log || exit 1"
 #	ssh ubuntu@${AWS_APPLIANCE_IP} "cat /var/log/cloud-init-output.log"
-	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep 'PREP_STATUS: completed' /root/singularity-integ-test/singularity/singularity-tests.log || exit 1"
+	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep 'PREP_STATUS: completed' /root/singularity-integ-test/singularity-tests.log || exit 1"
 	@echo "verification completed."
 
 connect:

@@ -13,29 +13,32 @@ fi
 
 cd $HOME
 
-# Prereqs
+echo "## Installing prereqs..."
 apt install mesa-opencl-icd ocl-icd-opencl-dev gcc git bzr jq pkg-config curl clang build-essential hwloc libhwloc-dev wget -y && sudo apt upgrade -y
 
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -y | sh
-wget -c https://go.dev/dl/go1.18.4.linux-amd64.tar.gz -O - | sudo tar -xz -C /usr/local
+echo "## Installing rust..."
+curl https://sh.rustup.rs -sSf > RUSTUP.sh
+sh RUSTUP.sh -y
+rm RUSTUP.sh
+
+echo "## Installing golang..."
+wget -c https://go.dev/dl/go1.18.4.linux-amd64.tar.gz -O - | tar -xz -C /usr/local
 echo "export PATH=$PATH:/usr/local/go/bin" >> ~/.bashrc && source ~/.bashrc
 
-# Build and install Lotus
+echo "## Building lotus..."
 git clone https://github.com/filecoin-project/lotus.git
 cd lotus/
 git checkout releases
-
-# Try calibnet, as documented.
+# Try calibnet, or devnet?
 make clean calibnet # Calibration with min 32GiB sectors
-sudo make install
+make install
 which lotus && lotus --version
 
+echo "## Starting lotus daemon..."
 nohup lotus daemon >> lotus-daemon.log 2>&1 &
-
 ls $HOME/.lotus
 
-# Await lotus startup:
-echo "awaiting lotus startup..."
+echo "## Awaiting lotus startup..."
 sleep 2
 MAX_SLEEP_SECS=20
 while [[ $MAX_SLEEP_SECS -ge 0 ]]; do
@@ -45,6 +48,6 @@ while [[ $MAX_SLEEP_SECS -ge 0 ]]; do
     sleep 1
 done
 
-# Create wallet
+echo "## Creating wallet..."
 lotus wallet new
 lotus wallet list
