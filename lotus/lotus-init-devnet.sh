@@ -16,7 +16,7 @@ cd $HOME
 # Prereqs
 apt install mesa-opencl-icd ocl-icd-opencl-dev gcc git bzr jq pkg-config curl clang build-essential hwloc libhwloc-dev wget -y && sudo apt upgrade -y
 
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -y | sh
 wget -c https://go.dev/dl/go1.18.4.linux-amd64.tar.gz -O - | sudo tar -xz -C /usr/local
 echo "export PATH=$PATH:/usr/local/go/bin" >> ~/.bashrc && source ~/.bashrc
 
