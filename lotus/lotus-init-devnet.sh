@@ -34,6 +34,17 @@ nohup lotus daemon >> lotus-daemon.log 2>&1 &
 
 ls $HOME/.lotus
 
+# Await lotus startup:
+echo "awaiting lotus startup..."
+sleep 2
+MAX_SLEEP_SECS=20
+while [[ $MAX_SLEEP_SECS -ge 0 ]]; do
+    lotus status && break
+    MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - 1 ))
+    if [ $MAX_SLEEP_SECS -lt 1 ]; then _error "Timeout waiting for daemon."; fi
+    sleep 1
+done
+
 # Create wallet
 lotus wallet new
 lotus wallet list

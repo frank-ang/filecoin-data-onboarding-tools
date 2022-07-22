@@ -48,7 +48,7 @@ export SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_PATH $OUT
 echo "executing command: $SINGULARITY_CMD"
 $SINGULARITY_CMD
 
-# Await job completion TODO:
+# Await prep completion
 echo "awaiting prep status completion."
 sleep 5
 PREP_STATUS="blank"

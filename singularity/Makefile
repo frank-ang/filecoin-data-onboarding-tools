@@ -32,3 +32,6 @@ wait_delete_appliance:
 verify_appliance:
 	ssh ubuntu@${AWS_APPLIANCE_IP} "grep 'EC2 instance inititalization COMPLETE' /var/log/cloud-init-output.log || exit 1"
 	ssh ubuntu@${AWS_APPLIANCE_IP} "cat /var/log/cloud-init-output.log"
+
+connect:
+	ssh ubuntu@${AWS_APPLIANCE_IP}
