@@ -3,7 +3,6 @@ SHELL=/bin/bash
 AWS_APPLIANCE_TEMPLATE=singularity/singularity-cloudformation.yml
 AWS_APPLIANCE_IP=`aws cloudformation describe-stacks --stack-name filecoin-singularity-appliance-test | jq '.Stacks[].Outputs[]|select(.OutputKey=="PublicIP").OutputValue' -r`
 
-
 -include config.mk.gitignore
 
 create_appliance:
@@ -30,9 +29,11 @@ wait_delete_appliance:
 	aws cloudformation wait stack-delete-complete --stack-name filecoin-singularity-appliance-test
 
 connect_verify:
-	ssh ubuntu@${AWS_APPLIANCE_IP} "grep 'EC2 instance inititalization COMPLETE' /var/log/cloud-init-output.log || exit 1"
-#	ssh ubuntu@${AWS_APPLIANCE_IP} "cat /var/log/cloud-init-output.log"
-	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep 'PREP_STATUS: completed' /root/singularity-integ-test/singularity-tests.log || exit 1"
+	ssh ubuntu@${AWS_APPLIANCE_IP} "grep 'EC2 instance inititalization COMPLETE' /var/log/cloud-init-output.log || exit 1" \
+	&& ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep 'PREP_STATUS: completed' /root/singularity-integ-test/singularity-tests.log || exit 1" \
+	&& ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep '## Building lotus' /root/singularity-integ-test/lotus-init-devnet.log || exit 1" \
+	&& ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep '## Starting lotus daemon' /root/singularity-integ-test/lotus-init-devnet.log || exit 1" \
+	&& ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep '## Creating wallet' /root/singularity-integ-test/lotus-init-devnet.log || exit 1"
 	@echo "verification completed."
 
 connect:

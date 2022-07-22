@@ -26,6 +26,8 @@ wget -c https://go.dev/dl/go1.18.4.linux-amd64.tar.gz -O - | tar -xz -C /usr/loc
 echo "export PATH=$PATH:/usr/local/go/bin" >> ~/.bashrc && source ~/.bashrc
 
 echo "## Building lotus..."
+rm -rf $HOME/lotus
+rm -rf $HOME/.lotus
 git clone https://github.com/filecoin-project/lotus.git
 cd lotus/
 git checkout releases
