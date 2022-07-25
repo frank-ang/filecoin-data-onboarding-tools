@@ -62,5 +62,6 @@ done
 echo "## Creating wallet..."
 lotus wallet new
 lotus wallet list
+lotus wallet balance
 
 echo "## Lotus setup completed."
