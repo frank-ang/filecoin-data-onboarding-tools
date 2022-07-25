@@ -44,11 +44,6 @@ which lotus && lotus --version
 echo "## Starting lotus daemon..."
 nohup lotus daemon >> lotus-daemon.log 2>&1 &
 
-## TODO
-## Gettting this:
-## ## Awaiting lotus startup...
-## ERROR: could not get API info for FullNode: could not get api endpoint: API not running (no endpoint)
-
 echo "## Awaiting lotus startup..."
 sleep 2
 MAX_SLEEP_SECS=20
