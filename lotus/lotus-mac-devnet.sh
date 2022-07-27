@@ -11,18 +11,25 @@ export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
 export CGO_CFLAGS="-D__BLST_PORTABLE__"
 
 LOTUS_SOURCE=$HOME/lab/lotus/
+LOTUS_DAEMON_LOG=${LOTUS_SOURCE}lotus-daemon.log
+LOTUS_MINER_LOG=${LOTUS_SOURCE}lotus-miner.log
 export LIBRARY_PATH=/opt/homebrew/lib
 export FFI_BUILD_FROM_SOURCE=1
 export PATH="$(brew --prefix coreutils)/libexec/gnubin:/usr/local/bin:$PATH"
 
-function _error() {
-    echo $1
-    exit 1
-}
-
 function _echo() {
     echo `date -u +"[%Y-%m-%dT%H:%M:%SZ]"`"##:$1"
 }
+
+function _error() {
+    _echo $1
+    exit 1
+}
+
+if [[ -z "$HOME" ]]; then
+    _echo "HOME undefined." 1>&2
+    exit 1
+fi
 
 function _waitLotusStartup() {
     echo "## Waiting for lotus startup..."
@@ -35,11 +42,6 @@ function _waitLotusStartup() {
         sleep 1
     done
 }
-
-if [[ -z "$HOME" ]]; then
-    echo "HOME undefined." 1>&2
-    exit 1
-fi
 
 function rebuild() {
     _echo "Rebuilding from source..."
@@ -81,8 +83,37 @@ function init_daemons() {
     nohup ./lotus-miner run --nosync >> lotus-miner.log 2>&1 &
 }
 
+function restart_daemons() {
+    _echo "restarting daemons..."
+    _echo "halting existing daemons..."
+    killall lotus-miner || true
+    killall lotus || true
+    sleep 1
+    start_daemons
+    _echo "daemons restarted."
+}
+
+function start_daemons() {
+    _echo "starting daemons..."
+    cd $LOTUS_SOURCE
+    nohup ./lotus daemon >> lotus-daemon.log 2>&1 &
+    time _waitLotusStartup
+    nohup ./lotus-miner run --nosync >> lotus-miner.log 2>&1 &
+    _echo "daemons started."
+}
+
+function tail_logs() {
+    _echo "Tailing logs..."
+    osascript -e 'tell app "Terminal"' -e 'do script "tail -f '${LOTUS_DAEMON_LOG}'"' -e 'end tell'
+    osascript -e 'tell app "Terminal"' -e 'do script "tail -f '${LOTUS_MINER_LOG}'"' -e 'end tell'
+
+}
+
 #rebuild
 
-init_daemons
+#init_daemons
+
+restart_daemons
+tail_logs
 
 _echo "end of script: $0"
