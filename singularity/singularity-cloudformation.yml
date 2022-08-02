@@ -73,7 +73,7 @@ Parameters:
     Description: EC2 Instance Type
     Type: String
     # Season to taste
-    Default: r5d.large
+    Default: r5d.4xlarge
     AllowedValues:
       - r5d.large
       - r5d.xlarge
@@ -229,7 +229,11 @@ Resources:
           git fetch
           git switch test
           cd ./singularity
-          nohup ./singularity-tests.sh >> singularity-tests.log 2>&1 &
+          nohup ./singularity-tests.sh >> ../singularity-tests.log 2>&1 &
+
+          # Lotus build, init, start daemon, verify.
+          cd $HOME/singularity-integ-test/lotus
+          nohup ./lotus-init-devnet.sh >> ../lotus-init-devnet.log 2>&1 &
 
           # All done, signal success.
           echo "## Signaling successful to CloudFormation."
