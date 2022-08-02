@@ -1,6 +1,6 @@
 #!/bin/bash
 
-## build and runs lotus miner TODO.
+## build, initialize, and run lotus daemon and lotus miner.
 
 set -e
 
@@ -22,7 +22,7 @@ function _echo() {
 }
 
 function _error() {
-    _echo $1
+    _echo "$1"
     exit 1
 }
 
@@ -34,7 +34,7 @@ fi
 function _waitLotusStartup() {
     echo "## Waiting for lotus startup..."
     sleep 2
-    MAX_SLEEP_SECS=20
+    MAX_SLEEP_SECS=60
     while [[ $MAX_SLEEP_SECS -ge 0 ]]; do
         lotus status && break
         MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - 1 ))
@@ -43,8 +43,14 @@ function _waitLotusStartup() {
     done
 }
 
+function _killall_daemons() {
+    killall lotus-miner || true
+    killall lotus || true
+}
+
 function rebuild() {
     _echo "Rebuilding from source..."
+    _killall_daemons
     cd $HOME/lab/
     rm -rf $LOTUS_SOURCE
     git clone https://github.com/filecoin-project/lotus.git
@@ -60,8 +66,9 @@ function rebuild() {
 
 function init_daemons() {
     _echo "Initializing Daemons..."
+    _killall_daemons
     rm -rf $LOTUS_PATH
-    rm -rf $LOTUS_MINER_HOME
+    rm -rf $LOTUS_MINER_PATH
     rm -rf ~/.genesis-sectors
     cd $LOTUS_SOURCE && _echo "Fetching parameters..." #
     time ./lotus fetch-params 2048
@@ -85,21 +92,20 @@ function init_daemons() {
 
 function restart_daemons() {
     _echo "restarting daemons..."
-    _echo "halting existing daemons..."
-    killall lotus-miner || true
-    killall lotus || true
-    sleep 1
+    _echo "halting any existing daemons..."
+    _killall_daemons
+    sleep 2
     start_daemons
     _echo "daemons restarted."
 }
 
 function start_daemons() {
-    _echo "starting daemons..."
+    _echo "Starting daemons..."
     cd $LOTUS_SOURCE
     nohup ./lotus daemon >> lotus-daemon.log 2>&1 &
     time _waitLotusStartup
     nohup ./lotus-miner run --nosync >> lotus-miner.log 2>&1 &
-    _echo "daemons started."
+    _echo "Daemons started."
 }
 
 function tail_logs() {
@@ -109,11 +115,130 @@ function tail_logs() {
 
 }
 
+function setup_wallets() {
+    _echo "Setting up wallets..."
+    lotus wallet list
+    SP_WALLET_ADDRESS=`lotus wallet list | tail -1 | cut -d' ' -f1`
+    _echo "SP lotus wallet address: $SP_WALLET_ADDRESS"
+    # create client wallet if not exists.
+    CLIENT_WALLET_ADDRESS=`lotus wallet list | tail -2 | head -1 | cut -d' ' -f1`
+    if [[ CLIENT_WALLET_ADDRESS=="Address" ]]; then
+        _echo "Creating new CLIENT wallet..."
+        lotus wallet new
+    else
+        _echo "Pre-exisitng CLIENT wallet."
+    fi
+    CLIENT_WALLET_ADDRESS=`lotus wallet list | tail -2 | head -1 | cut -d' ' -f1`
+    _echo "CLIENT lotus wallet address: $CLIENT_WALLET_ADDRESS"
+
+    _echo "Sending funds into CLIENT lotus wallet..."  
+    lotus send --from "$SP_WALLET_ADDRESS" "$CLIENT_WALLET_ADDRESS" 1000
+    CLIENT_WALLET_BALANCE=`lotus wallet balance "$CLIENT_WALLET_ADDRESS" | cut -d' ' -f1`
+    _echo "CLIENT lotus wallet address: $CLIENT_WALLET_ADDRESS, balance: $CLIENT_WALLET_BALANCE"
+}
+
+function client_lotus_deal() {
+    if [[ -z "$CLIENT_WALLET_ADDRESS" ]]; then
+        _echo "CLIENT_WALLET_ADDRESS undefined." 1>&2
+        exit 1
+    fi
+    
+    # Package a CAR file
+    _echo "Packaging CAR file..."
+    CAR_FILE=testdata.gitignore/car/testdata.car
+    rm -rf testdata.gitignore
+    mkdir -p testdata.gitignore/00 testdata.gitignore/car
+    dd if=/dev/urandom of="testdata.gitignore/00/data00" bs=1024 count=1 iflag=fullblock
+    IPFS_CAR_OUT=`ipfs-car --pack testdata.gitignore/00 --output $CAR_FILE`
+    ROOT_CID=`echo $IPFS_CAR_OUT | sed -rEn 's/^root CID: ([[:alnum:]]*).*$/\1/p'`
+    _echo "ROOT_CID: $ROOT_CID"
+
+    _echo "Importing CAR into Lotus..."
+    lotus client import --car $CAR_FILE
+    sleep 2
+
+    # PROBLEM: hangs at query-ask
+    _echo "Querying for miner ask..."
+    MINERID=`lotus-miner info | sed -En 's/^Miner: (t[[:digit:]]*).*$/\1/p'`
+    lotus client query-ask $MINERID
+    
+    # E.g. Price per GiB: 0.0000000005 FIL, per epoch (30sec) 
+    #      FIL/Epoch for 0.000002 GiB (2KB) : 
+    PRICE=0.000000000000001
+    DURATION=518400 # 180 days
+
+    _echo "Client Dealing... "
+    DEAL_CMD="lotus client deal --from $CLIENT_WALLET_ADDRESS $ROOT_CID $MINERID $PRICE $DURATION"
+    _echo "Executing: $DEAL_CMD"
+    DEAL_ID=`$DEAL_CMD`
+    _echo "DEAL_ID: $DEAL_ID"
+
+    sleep 2
+    lotus client list-deals --show-failed -v                                                                   
+    lotus client get-deal $DEAL_ID
+}
+
+function miner_handle_deal() {
+
+    _echo "Miner handling deal..."
+    lotus-miner storage-deals list
+    _echo "lotus-miner storage-deals pending-publish --publish-now ... "
+    lotus-miner storage-deals pending-publish
+    lotus-miner storage-deals pending-publish --publish-now
+
+    sleep 5
+
+    lotus-miner sectors list # sector in SubmitPreCommitBatch
+    # list sectors waiting in precommit batch queue
+    lotus-miner sectors batching precommit
+    _echo "lotus-miner sectors batching precommit --publish-now..."
+    lotus-miner sectors batching precommit --publish-now
+
+    sleep 5
+
+    lotus-miner sectors list # sector in Committing, then SubmitCommitAggregate
+
+    lotus-miner sectors batching commit
+    _echo "lotus-miner sectors batching commit --publish-now..."
+    lotus-miner sectors batching commit --publish-now
+    lotus-miner sectors list # sector should move thru CommitAggregateWait, PrecommitWait, WaitSeed, CommitWait, Proving, FinalizeSector
+
+    sleep 5
+
+    # successful deal should be in StorageDealActive.  
+    lotus-miner storage-deals list --format json | jq '.'
+    lotus client list-deals
+
+}
+
+
+function retrieve() {
+    CID=$1
+    if [[ -z "$CID" ]]; then
+        _echo "CID undefined." 1>&2
+        exit 1
+    fi
+    lotus client find $CID
+    lotus client retrieve $CID retrieved.car.gitignore
+    lotus client retrieve --car $CID retrieved-car.out
+}
+
+
+## Main operations here. WIP.
+
 #rebuild
-
 #init_daemons
+#sleep 10
+#restart_daemons
+#tail_logs
+#sleep 10
 
-restart_daemons
-tail_logs
+#setup_wallets
+#sleep 2
+#client_lotus_deal
+miner_handle_deal
+# retrieve $ROOT_CID
+
+#### TODO next idea: Deal using Singularity with wallet.
 
 _echo "end of script: $0"
