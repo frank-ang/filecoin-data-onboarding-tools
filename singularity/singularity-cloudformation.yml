@@ -73,8 +73,10 @@ Parameters:
     Description: EC2 Instance Type
     Type: String
     # Season to taste
-    Default: r5d.4xlarge
+    Default: r5a.2xlarge
     AllowedValues:
+      - r5a.xlarge
+      - r5a.2xlarge
       - r5d.large
       - r5d.xlarge
       - r5d.2xlarge
@@ -187,10 +189,10 @@ Resources:
           echo "## which stream-commp:"`which stream-commp`
 
           # Mount NVMe (SSD) instance store volume (Only for EC2 instance types that support it)
-          mkfs -t xfs /dev/nvme1n1
-          apt install -y xfsprogs
-          mkdir /local
-          mount /dev/nvme1n1 /local
+          # mkfs -t xfs /dev/nvme1n1
+          # apt install -y xfsprogs
+          # mkdir /local
+          # mount /dev/nvme1n1 /local
 
           # Repo
           cd /root

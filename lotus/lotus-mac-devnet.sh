@@ -120,21 +120,21 @@ function setup_wallets() {
     lotus wallet list
     SP_WALLET_ADDRESS=`lotus wallet list | tail -1 | cut -d' ' -f1`
     _echo "SP lotus wallet address: $SP_WALLET_ADDRESS"
-    # create client wallet if not exists.
     CLIENT_WALLET_ADDRESS=`lotus wallet list | tail -2 | head -1 | cut -d' ' -f1`
-    if [[ CLIENT_WALLET_ADDRESS=="Address" ]]; then
-        _echo "Creating new CLIENT wallet..."
+    if [[ "$CLIENT_WALLET_ADDRESS" == "Address" ]]; then
+        _echo "No client wallet found. Creating new wallet..."
         lotus wallet new
     else
-        _echo "Pre-exisitng CLIENT wallet."
+        _echo "Found pre-existing client wallet."
     fi
     CLIENT_WALLET_ADDRESS=`lotus wallet list | tail -2 | head -1 | cut -d' ' -f1`
-    _echo "CLIENT lotus wallet address: $CLIENT_WALLET_ADDRESS"
+    _echo "client lotus wallet address: $CLIENT_WALLET_ADDRESS"
 
-    _echo "Sending funds into CLIENT lotus wallet..."  
+    _echo "Sending funds into client lotus wallet..."
     lotus send --from "$SP_WALLET_ADDRESS" "$CLIENT_WALLET_ADDRESS" 1000
+    sleep 2
     CLIENT_WALLET_BALANCE=`lotus wallet balance "$CLIENT_WALLET_ADDRESS" | cut -d' ' -f1`
-    _echo "CLIENT lotus wallet address: $CLIENT_WALLET_ADDRESS, balance: $CLIENT_WALLET_BALANCE"
+    _echo "client lotus wallet address: $CLIENT_WALLET_ADDRESS, balance: $CLIENT_WALLET_BALANCE"
 }
 
 function client_lotus_deal() {
@@ -157,11 +157,13 @@ function client_lotus_deal() {
     lotus client import --car $CAR_FILE
     sleep 2
 
-    # PROBLEM: hangs at query-ask
-    _echo "Querying for miner ask..."
-    MINERID=`lotus-miner info | sed -En 's/^Miner: (t[[:digit:]]*).*$/\1/p'`
-    lotus client query-ask $MINERID
-    
+    export MINERID="t01000"
+
+    QUERY_ASK_CMD="lotus client query-ask $MINERID"
+    _echo "Executing: $QUERY_ASK_CMD"
+    QUERY_ASK_OUT=$($QUERY_ASK_CMD)
+    _echo "ask output: $QUERY_ASK_OUT"
+
     # E.g. Price per GiB: 0.0000000005 FIL, per epoch (30sec) 
     #      FIL/Epoch for 0.000002 GiB (2KB) : 
     PRICE=0.000000000000001
@@ -181,9 +183,9 @@ function client_lotus_deal() {
 function miner_handle_deal() {
 
     _echo "Miner handling deal..."
-    lotus-miner storage-deals list
+    lotus-miner storage-deals list -v # dealID shows as StorageDealPublish
     _echo "lotus-miner storage-deals pending-publish --publish-now ... "
-    lotus-miner storage-deals pending-publish
+    lotus-miner storage-deals pending-publish  # dealID should be queued for publish
     lotus-miner storage-deals pending-publish --publish-now
 
     sleep 5
@@ -194,20 +196,23 @@ function miner_handle_deal() {
     _echo "lotus-miner sectors batching precommit --publish-now..."
     lotus-miner sectors batching precommit --publish-now
 
+    # sector state progresses thru WaitSeed, Committing, SubmitCommitAggregate
     sleep 5
-
-    lotus-miner sectors list # sector in Committing, then SubmitCommitAggregate
-
-    lotus-miner sectors batching commit
+    lotus-miner sectors list
+    sleep 2
+    lotus-miner sectors batching commit # should show sector number.
+    sleep 3
     _echo "lotus-miner sectors batching commit --publish-now..."
     lotus-miner sectors batching commit --publish-now
+    sleep 3
     lotus-miner sectors list # sector should move thru CommitAggregateWait, PrecommitWait, WaitSeed, CommitWait, Proving, FinalizeSector
-
     sleep 5
 
     # successful deal should be in StorageDealActive.  
+    lotus-miner storage-deals list -v | grep $DEAL_ID
     lotus-miner storage-deals list --format json | jq '.'
-    lotus client list-deals
+    # Moves into Proving stage, requires WindowPOST.
+    lotus client list-deals # still shows StorageDealCheckForAcceptance, Not on-chain.
 
 }
 
@@ -218,26 +223,31 @@ function retrieve() {
         _echo "CID undefined." 1>&2
         exit 1
     fi
-    lotus client find $CID
-    lotus client retrieve $CID retrieved.car.gitignore
-    lotus client retrieve --car $CID retrieved-car.out
+    # following line throws error: ERR t01000@12D3KooW9sKNwEP2x5rKZojgFstGihzgGxjFNj3ukcWTVHgMh9Sm: exhausted 5 attempts but failed to open stream, err: peer:12D3KooW9sKNwEP2x5rKZojgFstGihzgGxjFNj3ukcWTVHgMh9Sm: resource limit exceeded
+    # lotus client find $CID
+    lotus client retrieve --provider t01000 $CID retrieved.car.gitignore
+    lotus client retrieve --provider t01000 --car $CID retrieved-car.out
 }
 
 
 ## Main operations here. WIP.
 
 #rebuild
-#init_daemons
-#sleep 10
-#restart_daemons
-#tail_logs
-#sleep 10
+#init_daemons && sleep 10
 
-#setup_wallets
-#sleep 2
+#restart_daemons
+#tail_logs && sleep 10
+#setup_wallets && sleep 5
+
+#export CLIENT_WALLET_ADDRESS=t1wd5fq6avgyggnag4hspidfubede2dnvmcqm6szq
 #client_lotus_deal
-miner_handle_deal
-# retrieve $ROOT_CID
+
+#client_lotus_deal && sleep 5
+#miner_handle_deal
+## retrieve $ROOT_CID
+# retrieve bafybeigplqr2aukpyfjmqw6wd5vj3jzf4wgfgehnurnnbepl7utbfi5quu
+
+_killall_daemons
 
 #### TODO next idea: Deal using Singularity with wallet.
 
