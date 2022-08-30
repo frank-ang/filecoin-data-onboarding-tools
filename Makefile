@@ -37,3 +37,8 @@ connect_verify:
 
 connect:
 	ssh ubuntu@${AWS_APPLIANCE_IP}
+
+deploy_init_devnet_script:
+	scp lotus/lotus-init-devnet.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/lotus-init-devnet.sh
+	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/lotus-init-devnet.sh /root/singularity-integ-test/lotus/myinit.sh"
+

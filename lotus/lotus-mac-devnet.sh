@@ -18,11 +18,11 @@ export FFI_BUILD_FROM_SOURCE=1
 export PATH="$(brew --prefix coreutils)/libexec/gnubin:/usr/local/bin:$PATH"
 
 function _echo() {
-    echo `date -u +"[%Y-%m-%dT%H:%M:%SZ]"`"##:$1"
+    echo `date -u +"%Y-%m-%dT%H:%M:%SZ"`"##:$1"
 }
 
 function _error() {
-    _echo "$1"
+    _echo "ERROR: $1"
     exit 1
 }
 
@@ -33,14 +33,8 @@ fi
 
 function _waitLotusStartup() {
     echo "## Waiting for lotus startup..."
-    sleep 2
-    MAX_SLEEP_SECS=60
-    while [[ $MAX_SLEEP_SECS -ge 0 ]]; do
-        lotus status && break
-        MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - 1 ))
-        if [ $MAX_SLEEP_SECS -lt 1 ]; then _error "Timeout waiting for daemon."; fi
-        sleep 1
-    done
+    lotus wait-api --timeout 60s
+    lotus status || _error "timeout waiting for lotus startup."
 }
 
 function _killall_daemons() {
@@ -150,7 +144,7 @@ function client_lotus_deal() {
     mkdir -p testdata.gitignore/00 testdata.gitignore/car
     dd if=/dev/urandom of="testdata.gitignore/00/data00" bs=1024 count=1 iflag=fullblock
     IPFS_CAR_OUT=`ipfs-car --pack testdata.gitignore/00 --output $CAR_FILE`
-    ROOT_CID=`echo $IPFS_CAR_OUT | sed -rEn 's/^root CID: ([[:alnum:]]*).*$/\1/p'`
+    export ROOT_CID=`echo $IPFS_CAR_OUT | sed -rEn 's/^root CID: ([[:alnum:]]*).*$/\1/p'`
     _echo "ROOT_CID: $ROOT_CID"
 
     _echo "Importing CAR into Lotus..."
@@ -172,7 +166,7 @@ function client_lotus_deal() {
     _echo "Client Dealing... "
     DEAL_CMD="lotus client deal --from $CLIENT_WALLET_ADDRESS $ROOT_CID $MINERID $PRICE $DURATION"
     _echo "Executing: $DEAL_CMD"
-    DEAL_ID=`$DEAL_CMD`
+    export DEAL_ID=`$DEAL_CMD`
     _echo "DEAL_ID: $DEAL_ID"
 
     sleep 2
@@ -225,8 +219,8 @@ function retrieve() {
     fi
     # following line throws error: ERR t01000@12D3KooW9sKNwEP2x5rKZojgFstGihzgGxjFNj3ukcWTVHgMh9Sm: exhausted 5 attempts but failed to open stream, err: peer:12D3KooW9sKNwEP2x5rKZojgFstGihzgGxjFNj3ukcWTVHgMh9Sm: resource limit exceeded
     # lotus client find $CID
-    lotus client retrieve --provider t01000 $CID retrieved.car.gitignore
-    lotus client retrieve --provider t01000 --car $CID retrieved-car.out
+    lotus client retrieve --provider t01000 $CID `pwd`/retrieved-out.gitignore
+    lotus client retrieve --provider t01000 --car $CID `pwd`/retrieved-car.gitignore
 }
 
 
@@ -237,17 +231,19 @@ function retrieve() {
 
 #restart_daemons
 #tail_logs && sleep 10
-#setup_wallets && sleep 5
 
-#export CLIENT_WALLET_ADDRESS=t1wd5fq6avgyggnag4hspidfubede2dnvmcqm6szq
+#setup_wallets && sleep 5
+export CLIENT_WALLET_ADDRESS=t1wd5fq6avgyggnag4hspidfubede2dnvmcqm6szq
+
 #client_lotus_deal
 
 #client_lotus_deal && sleep 5
 #miner_handle_deal
 ## retrieve $ROOT_CID
-# retrieve bafybeigplqr2aukpyfjmqw6wd5vj3jzf4wgfgehnurnnbepl7utbfi5quu
-
-_killall_daemons
+#retrieve bafybeigplqr2aukpyfjmqw6wd5vj3jzf4wgfgehnurnnbepl7utbfi5quu
+ROOT_CID=bafybeiheusdoo3wdn3zvpaoprp2tzygydlh2bsvhyisasldre3obfjofii
+retrieve $ROOT_CID
+#_killall_daemons
 
 #### TODO next idea: Deal using Singularity with wallet.
 
