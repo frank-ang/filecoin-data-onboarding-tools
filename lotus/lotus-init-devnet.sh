@@ -31,8 +31,10 @@ function _waitLotusStartup() {
 }
 
 function _killall_daemons() {
-    killall lotus-miner || true
-    killall lotus || true
+    lotus-miner stop || true
+    lotus daemon stop || true
+    #killall lotus-miner || true
+    #killall lotus || true
 }
 
 
@@ -255,8 +257,8 @@ function retrieve() { # TODO TEST
     fi
     # following line throws error: ERR t01000@12D3KooW9sKNwEP2x5rKZojgFstGihzgGxjFNj3ukcWTVHgMh9Sm: exhausted 5 attempts but failed to open stream, err: peer:12D3KooW9sKNwEP2x5rKZojgFstGihzgGxjFNj3ukcWTVHgMh9Sm: resource limit exceeded
     # lotus client find $CID
-    lotus client retrieve --provider t01000 $CID retrieved.car.gitignore
-    lotus client retrieve --provider t01000 --car $CID retrieved-car.out
+    lotus client retrieve --provider t01000 $CID `pwd`/retrieved.car.gitignore
+    lotus client retrieve --provider t01000 --car `pwd`/$CID retrieved-car.out
 }
 
 

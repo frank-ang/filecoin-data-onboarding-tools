@@ -38,8 +38,10 @@ function _waitLotusStartup() {
 }
 
 function _killall_daemons() {
-    killall lotus-miner || true
-    killall lotus || true
+    lotus-miner stop || true
+    lotus daemon stop || true
+    #killall lotus-miner || true
+    #killall lotus || true
 }
 
 function rebuild() {
@@ -217,8 +219,9 @@ function retrieve() {
         _echo "CID undefined." 1>&2
         exit 1
     fi
-    # following line throws error: ERR t01000@12D3KooW9sKNwEP2x5rKZojgFstGihzgGxjFNj3ukcWTVHgMh9Sm: exhausted 5 attempts but failed to open stream, err: peer:12D3KooW9sKNwEP2x5rKZojgFstGihzgGxjFNj3ukcWTVHgMh9Sm: resource limit exceeded
-    # lotus client find $CID
+    lotus client find $CID
+    rm -rf `pwd`/retrieved-out.gitignore
+    rm -f `pwd`/retrieved-car.gitignore
     lotus client retrieve --provider t01000 $CID `pwd`/retrieved-out.gitignore
     lotus client retrieve --provider t01000 --car $CID `pwd`/retrieved-car.gitignore
 }
@@ -234,16 +237,15 @@ function retrieve() {
 
 #setup_wallets && sleep 5
 export CLIENT_WALLET_ADDRESS=t1wd5fq6avgyggnag4hspidfubede2dnvmcqm6szq
-
 #client_lotus_deal
-
 #client_lotus_deal && sleep 5
+
 #miner_handle_deal
 ## retrieve $ROOT_CID
-#retrieve bafybeigplqr2aukpyfjmqw6wd5vj3jzf4wgfgehnurnnbepl7utbfi5quu
-ROOT_CID=bafybeiheusdoo3wdn3zvpaoprp2tzygydlh2bsvhyisasldre3obfjofii
-retrieve $ROOT_CID
-#_killall_daemons
+retrieve bafybeicgcmnbeg6ftpmlbkynnvv7pp77ddgq5nglbju7zp26py4di7bmgy
+# ROOT_CID=bafybeiheusdoo3wdn3zvpaoprp2tzygydlh2bsvhyisasldre3obfjofii
+#retrieve $ROOT_CID
+# _killall_daemons
 
 #### TODO next idea: Deal using Singularity with wallet.
 
