@@ -11,9 +11,18 @@ export LOTUS_SKIP_GENESIS_CHECK=_yes_
 export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
 export CGO_CFLAGS="-D__BLST_PORTABLE__"
 
+LOTUS_MINER_CONFIG_FILE="./lotusminer-autopublish-mac-config.toml"
 LOTUS_SOURCE=$HOME/lotus/
 LOTUS_DAEMON_LOG=${LOTUS_SOURCE}lotus-daemon.log
 LOTUS_MINER_LOG=${LOTUS_SOURCE}lotus-miner.log
+
+
+if [[ -z "$HOME" ]]; then
+    echo "HOME undefined." 1>&2
+    exit 1
+fi
+
+cd $HOME
 
 function _echo() {
     echo `date -u +"%Y-%m-%dT%H:%M:%SZ"`"##:$1"
@@ -33,8 +42,6 @@ function _waitLotusStartup() {
 function _killall_daemons() {
     lotus-miner stop || true
     lotus daemon stop || true
-    #killall lotus-miner || true
-    #killall lotus || true
 }
 
 
@@ -210,7 +217,9 @@ function client_lotus_deal() {
     lotus client get-deal $DEAL_ID
 }
 
-function miner_handle_deal() { # TODO TEST
+# No need to push things along manually, by setting auto-publish in config.toml.
+function miner_handle_deal_manually_deprecated() {
+    # Wait timings are fragile.
 
     _echo "Miner handling deal..."
     lotus-miner storage-deals list -v # dealID shows as StorageDealPublish
@@ -262,23 +271,25 @@ function retrieve() { # TODO TEST
 }
 
 
-if [[ -z "$HOME" ]]; then
-    echo "HOME undefined." 1>&2
-    exit 1
-fi
+function deploy_miner_config() {
+    cp -f $LOTUS_MINER_PATH/config.toml $LOTUS_MINER_PATH/config.toml.bak
+    cp -f $LOTUS_MINER_CONFIG_FILE $LOTUS_MINER_PATH/config.toml
+}
 
-cd $HOME
+
+# Execute function from parameters
+$@
 
 #_killall_daemons
 #rebuild
 #init_daemons && sleep 10
 #restart_daemons
 
-setup_wallets && sleep 5
+# setup_wallets && sleep 5
 
-client_lotus_deal
+# client_lotus_deal
 
 #client_lotus_deal && sleep 5
 #miner_handle_deal
 
-echo "## Lotus devnet test completed."
+_echo "Lotus Linux devnet test completed: $0"

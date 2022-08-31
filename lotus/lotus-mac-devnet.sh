@@ -40,8 +40,6 @@ function _waitLotusStartup() {
 function _killall_daemons() {
     lotus-miner stop || true
     lotus daemon stop || true
-    #killall lotus-miner || true
-    #killall lotus || true
 }
 
 function rebuild() {
@@ -172,11 +170,13 @@ function client_lotus_deal() {
     _echo "DEAL_ID: $DEAL_ID"
 
     sleep 2
-    lotus client list-deals --show-failed -v                                                                   
+    lotus client list-deals --show-failed -v
     lotus client get-deal $DEAL_ID
 }
 
-function miner_handle_deal() {
+# No need to push things along manually, by setting auto-publish in config.toml.
+function miner_handle_deal_manually_deprecated() {
+    # Wait timings are fragile.
 
     _echo "Miner handling deal..."
     lotus-miner storage-deals list -v # dealID shows as StorageDealPublish
@@ -204,11 +204,11 @@ function miner_handle_deal() {
     lotus-miner sectors list # sector should move thru CommitAggregateWait, PrecommitWait, WaitSeed, CommitWait, Proving, FinalizeSector
     sleep 5
 
-    # successful deal should be in StorageDealActive.  
+    # successful deal should be in StorageDealActive.
     lotus-miner storage-deals list -v | grep $DEAL_ID
     lotus-miner storage-deals list --format json | jq '.'
     # Moves into Proving stage, requires WindowPOST.
-    lotus client list-deals # still shows StorageDealCheckForAcceptance, Not on-chain.
+    lotus client list-deals
 
 }
 
@@ -223,9 +223,24 @@ function retrieve() {
     rm -rf `pwd`/retrieved-out.gitignore
     rm -f `pwd`/retrieved-car.gitignore
     lotus client retrieve --provider t01000 $CID `pwd`/retrieved-out.gitignore
-    lotus client retrieve --provider t01000 --car $CID `pwd`/retrieved-car.gitignore
+    # lotus client retrieve --provider t01000 --car $CID `pwd`/retrieved-car.gitignore
 }
 
+function retrieve_wait() {
+    CID=$1
+    RETRY_COUNT=20
+    until retrieve $CID; do
+        RETRY_COUNT=$((RETRY_COUNT-1))
+        if [[ "$RETRY_COUNT" < 1 ]]; then _error "Exhausted retrie retries"; fi
+        _echo "RETRY_COUNT: $RETRY_COUNT"
+        sleep 10
+    done
+}
+
+export CLIENT_WALLET_ADDRESS=t1wd5fq6avgyggnag4hspidfubede2dnvmcqm6szq
+
+# Execute function from parameters
+$@
 
 ## Main operations here. WIP.
 
@@ -236,13 +251,12 @@ function retrieve() {
 #tail_logs && sleep 10
 
 #setup_wallets && sleep 5
-export CLIENT_WALLET_ADDRESS=t1wd5fq6avgyggnag4hspidfubede2dnvmcqm6szq
 #client_lotus_deal
 #client_lotus_deal && sleep 5
 
-#miner_handle_deal
+#miner_handle_deal_manually_deprecated
 ## retrieve $ROOT_CID
-retrieve bafybeicgcmnbeg6ftpmlbkynnvv7pp77ddgq5nglbju7zp26py4di7bmgy
+# retrieve bafybeicgcmnbeg6ftpmlbkynnvv7pp77ddgq5nglbju7zp26py4di7bmgy
 # ROOT_CID=bafybeiheusdoo3wdn3zvpaoprp2tzygydlh2bsvhyisasldre3obfjofii
 #retrieve $ROOT_CID
 # _killall_daemons
