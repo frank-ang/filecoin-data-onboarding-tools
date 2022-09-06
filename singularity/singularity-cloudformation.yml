@@ -73,8 +73,10 @@ Parameters:
     Description: EC2 Instance Type
     Type: String
     # Season to taste
-    Default: r5d.4xlarge
+    Default: r5a.2xlarge
     AllowedValues:
+      - r5a.xlarge
+      - r5a.2xlarge
       - r5d.large
       - r5d.xlarge
       - r5d.2xlarge
@@ -143,9 +145,7 @@ Resources:
           echo "file /root/.bashrc : "`file /root/.bashrc` 
 
           # Node 16
-          ##curl -sL https://deb.nodesource.com/setup_16.x | sudo bash -
-          ##sudo apt -y install nodejs
-          ##npm install -g ipfs-car
+
           echo "## Installing NVM..." 
           # Install nvm (https://github.com/nvm-sh/nvm#install--update-script)
           export HOME=/root
@@ -187,10 +187,10 @@ Resources:
           echo "## which stream-commp:"`which stream-commp`
 
           # Mount NVMe (SSD) instance store volume (Only for EC2 instance types that support it)
-          mkfs -t xfs /dev/nvme1n1
-          apt install -y xfsprogs
-          mkdir /local
-          mount /dev/nvme1n1 /local
+          # mkfs -t xfs /dev/nvme1n1
+          # apt install -y xfsprogs
+          # mkdir /local
+          # mount /dev/nvme1n1 /local
 
           # Repo
           cd /root
