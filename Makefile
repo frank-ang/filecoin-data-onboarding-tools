@@ -2,8 +2,8 @@
 SHELL=/bin/bash
 STACK_NAME="filecoin-singularity-appliance-test"
 AWS_APPLIANCE_TEMPLATE=singularity/singularity-cloudformation.yml
-AWS_APPLIANCE_IP=`aws cloudformation describe-stacks --stack-name ${STACK_NAME} | jq -r '.Stacks[].Outputs[]|select(.OutputKey=="PublicIP").OutputValue'`
-AWS_APPLIANCE_INSTANCE_ID=`aws cloudformation describe-stacks --stack-name ${STACK_NAME} | jq -r '.Stacks[].Outputs[]|select(.OutputKey=="InstanceId").OutputValue'`
+AWS_APPLIANCE_INSTANCE_ID=$(shell aws cloudformation describe-stacks --stack-name ${STACK_NAME} | jq -r '.Stacks[].Outputs[]|select(.OutputKey=="InstanceId").OutputValue')
+AWS_APPLIANCE_IP=$(shell aws ec2 describe-instances --instance-id ${AWS_APPLIANCE_INSTANCE_ID} | jq -r '.Reservations[].Instances[].PublicIpAddress')
 
 -include config.mk.gitignore
 
@@ -44,9 +44,10 @@ connect_verify:
 	@echo "verification completed."
 
 connect:
+	@echo "connecting to: ${AWS_APPLIANCE_IP}"
 	ssh ubuntu@${AWS_APPLIANCE_IP}
 
-deploy_init_devnet_script:
+deploy_script:
 	scp lotus/lotus-init-devnet.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/lotus-init-devnet.sh
-	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/lotus-init-devnet.sh /root/singularity-integ-test/lotus/myinit.sh"
+	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/lotus-init-devnet.sh /root/singularity-integ-test/lotus/"
 

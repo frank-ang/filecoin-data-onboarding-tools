@@ -11,7 +11,7 @@ export LOTUS_SKIP_GENESIS_CHECK=_yes_
 export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
 export CGO_CFLAGS="-D__BLST_PORTABLE__"
 
-LOTUS_MINER_CONFIG_FILE="./lotusminer-autopublish-mac-config.toml"
+LOTUS_MINER_CONFIG_FILE=`pwd`"/lotusminer-autopublish-mac-config.toml"
 LOTUS_SOURCE=$HOME/lotus/
 LOTUS_DAEMON_LOG=${LOTUS_SOURCE}lotus-daemon.log
 LOTUS_MINER_LOG=${LOTUS_SOURCE}lotus-miner.log
@@ -255,6 +255,10 @@ function miner_handle_deal_manually_deprecated() {
     lotus-miner storage-deals list --format json | jq '.'
     # Moves into Proving stage, requires WindowPOST.
     lotus client list-deals # still shows StorageDealCheckForAcceptance, Not on-chain.
+
+    # The deal will go Active after meeting a proving deadline.
+    lotus-miner proving deadlines
+
 }
 
 
@@ -285,9 +289,9 @@ $@
 #init_daemons && sleep 10
 #restart_daemons
 
-# setup_wallets && sleep 5
+setup_wallets && sleep 5
 
-# client_lotus_deal
+client_lotus_deal
 
 #client_lotus_deal && sleep 5
 #miner_handle_deal

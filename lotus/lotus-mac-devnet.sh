@@ -10,6 +10,7 @@ export LOTUS_SKIP_GENESIS_CHECK=_yes_
 export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
 export CGO_CFLAGS="-D__BLST_PORTABLE__"
 
+LOTUS_MINER_CONFIG_FILE=`pwd`"/lotusminer-autopublish-mac-config.toml"
 LOTUS_SOURCE=$HOME/lab/lotus/
 LOTUS_DAEMON_LOG=${LOTUS_SOURCE}lotus-daemon.log
 LOTUS_MINER_LOG=${LOTUS_SOURCE}lotus-miner.log
@@ -37,14 +38,14 @@ function _waitLotusStartup() {
     lotus status || _error "timeout waiting for lotus startup."
 }
 
-function _killall_daemons() {
+function killall_daemons() {
     lotus-miner stop || true
     lotus daemon stop || true
 }
 
 function rebuild() {
-    _echo "Rebuilding from source..."
-    _killall_daemons
+    _echo "📦Rebuilding from source...📦"
+    killall_daemons
     cd $HOME/lab/
     rm -rf $LOTUS_SOURCE
     git clone https://github.com/filecoin-project/lotus.git
@@ -59,8 +60,8 @@ function rebuild() {
 }
 
 function init_daemons() {
-    _echo "Initializing Daemons..."
-    _killall_daemons
+    _echo "📦Initializing Daemons...📦"
+    killall_daemons
     rm -rf $LOTUS_PATH
     rm -rf $LOTUS_MINER_PATH
     rm -rf ~/.genesis-sectors
@@ -84,17 +85,22 @@ function init_daemons() {
     nohup ./lotus-miner run --nosync >> lotus-miner.log 2>&1 &
 }
 
+function deploy_miner_config() {
+    cp -f $LOTUS_MINER_PATH/config.toml $LOTUS_MINER_PATH/config.toml.bak
+    cp -f $LOTUS_MINER_CONFIG_FILE $LOTUS_MINER_PATH/config.toml
+}
+
 function restart_daemons() {
     _echo "restarting daemons..."
     _echo "halting any existing daemons..."
-    _killall_daemons
+    killall_daemons
     sleep 2
     start_daemons
     _echo "daemons restarted."
 }
 
 function start_daemons() {
-    _echo "Starting daemons..."
+    _echo "📦Starting daemons...📦"
     cd $LOTUS_SOURCE
     nohup ./lotus daemon >> lotus-daemon.log 2>&1 &
     time _waitLotusStartup
@@ -110,7 +116,7 @@ function tail_logs() {
 }
 
 function setup_wallets() {
-    _echo "Setting up wallets..."
+    _echo "📦Setting up wallets..📦."
     lotus wallet list
     SP_WALLET_ADDRESS=`lotus wallet list | tail -1 | cut -d' ' -f1`
     _echo "SP lotus wallet address: $SP_WALLET_ADDRESS"
@@ -138,7 +144,7 @@ function client_lotus_deal() {
     fi
     
     # Package a CAR file
-    _echo "Packaging CAR file..."
+    _echo "📦Packaging CAR file...📦"
     CAR_FILE=testdata.gitignore/car/testdata.car
     rm -rf testdata.gitignore
     mkdir -p testdata.gitignore/00 testdata.gitignore/car
@@ -237,30 +243,50 @@ function retrieve_wait() {
     done
 }
 
-export CLIENT_WALLET_ADDRESS=t1wd5fq6avgyggnag4hspidfubede2dnvmcqm6szq
 
-# Execute function from parameters
+function init_boost() {
+    
+    #PUBLISH_STORAGE_DEALS_WALLET=`lotus wallet new bls` # t3qjjjzidrcjjkmplkctddkfyopr6skmxoivto2p7xb4sxhhf3glg524cjjjqrhjxl6ja26k27ph3www2yzwfa
+    #COLLAT_WALLET=`lotus wallet new bls` # t3ve53qhszjszvvp2cdsbs5pwphpww7rjwnqhusn6zb2to6sy4vqkeadsbtu7kor5gp7voamscjsunaxj73gha
+    # Some hardcoding...
+    export SP_WALLET_ADDRESS=t3xcz3ni4tvu2yhc4oznumdsyf3vgtgd4iy5y3xjgfft7wkygxkjmihv5lltuwnm2ztgpjqhwqdgwylfvihrkq
+    export PUBLISH_STORAGE_DEALS_WALLET=t3qjjjzidrcjjkmplkctddkfyopr6skmxoivto2p7xb4sxhhf3glg524cjjjqrhjxl6ja26k27ph3www2yzwfa
+    export COLLAT_WALLET=t3ve53qhszjszvvp2cdsbs5pwphpww7rjwnqhusn6zb2to6sy4vqkeadsbtu7kor5gp7voamscjsunaxj73gha
+    
+    lotus send --from $SP_WALLET_ADDRESS $PUBLISH_STORAGE_DEALS_WALLET 10
+    lotus send --from $SP_WALLET_ADDRESS $COLLAT_WALLET 10
+    sleep 60 # takes some time... actor not found, requires chain sync so the new wallet addresses can be found.
+    lotus wallet balance $PUBLISH_STORAGE_DEALS_WALLET
+    lotus wallet balance $COLLAT_WALLET
+
+
+    lotus-miner actor control set --really-do-it $PUBLISH_STORAGE_DEALS_WALLET
+
+}
+
+function full_rebuild_test() {
+    rebuild
+    init_daemons && sleep 10
+
+    killall_daemons && sleep 2
+    deploy_miner_config
+    restart_daemons
+    tail_logs && sleep 10
+
+    setup_wallets && sleep 5
+    client_lotus_deal
+    client_lotus_deal && sleep 5
+}
+
+# Execute a function name from CLI parameters
 $@
 
-## Main operations here. WIP.
-
-#rebuild
-#init_daemons && sleep 10
-
-#restart_daemons
-#tail_logs && sleep 10
-
-#setup_wallets && sleep 5
-#client_lotus_deal
-#client_lotus_deal && sleep 5
-
-#miner_handle_deal_manually_deprecated
 ## retrieve $ROOT_CID
 # retrieve bafybeicgcmnbeg6ftpmlbkynnvv7pp77ddgq5nglbju7zp26py4di7bmgy
 # ROOT_CID=bafybeiheusdoo3wdn3zvpaoprp2tzygydlh2bsvhyisasldre3obfjofii
 #retrieve $ROOT_CID
-# _killall_daemons
+# killall_daemons
 
-#### TODO next idea: Deal using Singularity with wallet.
+#### TODO next idea: Deal using Boost and Singularity.
 
-_echo "end of script: $0"
+_echo "Lotus Mac devnet test completed: $0"
