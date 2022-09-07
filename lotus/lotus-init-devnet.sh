@@ -1,5 +1,7 @@
 #!/bin/bash
 # Run as root.
+# E.g. via nohup or tmux:
+#         ./lotus-init-devnet.sh full_rebuild_test > ./full_rebuild_test.out 2>&1 &
 # Build Lotus devnet from source, configure, run devnet
 # Based on: 
 # https://lotus.filecoin.io/lotus/install/linux/#building-from-source
@@ -10,7 +12,7 @@ export LOTUS_MINER_PATH=$HOME/.lotusminerDevnetTest/
 export LOTUS_SKIP_GENESIS_CHECK=_yes_
 export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
 export CGO_CFLAGS="-D__BLST_PORTABLE__"
-export BOOST_SOURCE_PATH=$HOME/lab/boost/
+export BOOST_SOURCE_PATH=$HOME/boost/
 export BOOST_PATH=$HOME/.boost
 export BOOST_CLIENT_PATH=$HOME/.boost-client
 TEST_CONFIG_FILE=`pwd`"/test_config.gitignore"
@@ -35,8 +37,9 @@ function _error() {
 }
 
 function _waitLotusStartup() {
-    echo "## Waiting for lotus startup..."
-    lotus wait-api --timeout 60s
+    t=${1:-"120s"} # note trailing "s"
+    echo "## Waiting for lotus startup, timeout $t..."
+    lotus wait-api --timeout $t
     lotus status || _error "timeout waiting for lotus startup."
 }
 
@@ -93,15 +96,15 @@ function init_daemons() {
     _echo "Create a default address and give it some funds..."
     time ./lotus-seed genesis add-miner localnet.json ~/.genesis-sectors/pre-seal-t01000.json
     _echo "Starting first node..."
-    nohup ./lotus daemon --lotus-make-genesis=devgen.car --genesis-template=localnet.json --bootstrap=false >> lotus-daemon.log 2>&1 &
-    _echo "Awaiting daemon startup..."
-    time _waitLotusStartup
+    nohup ./lotus daemon --lotus-make-genesis=devgen.car --genesis-template=localnet.json --bootstrap=false >> /var/log/lotus-daemon.log 2>&1 &
+    _echo "Awaiting daemon startup... could take awhile...."
+    time _waitLotusStartup "1800s"
     _echo "Importing the genesis miner key..." 
     ./lotus wallet import --as-default ~/.genesis-sectors/pre-seal-t01000.key
     _echo "Set up the genesis miner. This process can take a few minutes..."
     time ./lotus-miner init --genesis-miner --actor=t01000 --sector-size=2KiB --pre-sealed-sectors=~/.genesis-sectors --pre-sealed-metadata=~/.genesis-sectors/pre-seal-t01000.json --nosync
     _echo "Starting the miner..."
-    nohup ./lotus-miner run --nosync >> lotus-miner.log 2>&1 &
+    nohup ./lotus-miner run --nosync >> /var/log/lotus-miner.log 2>&1 &
 }
 
 function deploy_miner_config() {
@@ -121,12 +124,14 @@ function restart_daemons() {
 function start_daemons() {
     _echo "Starting daemons..."
     cd $LOTUS_SOURCE
-    nohup ./lotus daemon >> lotus-daemon.log 2>&1 &
+    nohup lotus daemon >> /var/log/lotus-daemon.log 2>&1 &
     time _waitLotusStartup
-    nohup ./lotus-miner run --nosync >> lotus-miner.log 2>&1 &
+    nohup lotus-miner run --nosync >> /var/log/lotus-miner.log 2>&1 &
+    lotus-miner wait-api --timeout 300s
     _echo "Daemons started."
 }
 
+# Setup SP_WALLET_ADDRESS, CLIENT_WALLET_ADDRESS
 function setup_wallets() {
     _echo "Setting up wallets..."
     lotus wallet list
@@ -254,20 +259,20 @@ function full_rebuild_test() {
 
     killall_daemons && sleep 2
     deploy_miner_config
-    restart_daemons
-    tail_logs && sleep 10
+    restart_daemons && sleep 2
 
     setup_wallets && sleep 5
-    client_lotus_deal
-    client_lotus_deal && sleep 5
+    # client_lotus_deal && sleep 5   # should be ok, but lets avoid legacy deals, because boost
+    build_boost
+    config_boost
 }
 
 function build_boost() {
     _echo "📦 building boost... 📦 "
-    cd $BOOST_SOURCE_PATH/..
-    rm -rf $BOOST_SOURCE_PATH
+    cd $HOME
+    rm -rf boost || true
     git clone https://github.com/filecoin-project/boost
-    cd $BOOST_SOURCE_PATH
+    cd boost
     git pull
     make clean
     make build
@@ -280,8 +285,8 @@ function config_boost() {
     mv -f $BOOST_PATH $BOOST_PATH.bak || true
     mv -f $BOOST_CLIENT_PATH $BOOST_CLIENT_PATH.bak || true
 
-    setup_wallets
     if grep "PUBLISH_STORAGE_DEALS_WALLET" "$TEST_CONFIG_FILE"; then
+        _echo "reusing PUBLISH_STORAGE_DEALS_WALLET from $TEST_CONFIG_FILE"
         . "$TEST_CONFIG_FILE"
     else
         PUBLISH_STORAGE_DEALS_WALLET=`lotus wallet new bls`
@@ -297,8 +302,7 @@ function config_boost() {
         _echo "COLLAT_WALLET balance: "`lotus wallet balance $COLLAT_WALLET`
     fi
 
-    echo "migrating monolithic lotus-miner to boost"
-    # Set the publish storage deals wallet as a control wallet.
+    _echo "Setting the publish storage deals wallet as a control wallet..."
     export OLD_CONTROL_ADDRESS=`lotus-miner actor control list  --verbose | awk '{print $3}' | grep -v key | tr -s '\n'  ' '`
     lotus-miner actor control set --really-do-it $PUBLISH_STORAGE_DEALS_WALLET $OLD_CONTROL_ADDRESS
 
@@ -317,25 +321,29 @@ function config_boost() {
     # Backup the lotus-miner datastore (in case you decide to roll back from Boost to Lotus) with: lotus-shed market export-datastore --repo <repo> --backup-dir <backup-dir>
 
     # migrate lotus-markets
-    boostd --vv migrate-monolith \
+    export $(lotus auth api-info --perm=admin)
+    _echo "Migrating monolithic lotus-miner to boost"
+    MIGRATE_CMD="boostd --vv migrate-monolith \
        --import-miner-repo="$LOTUS_MINER_PATH" \
        --api-sealer=$APISEALER \
        --api-sector-index=$APISECTORINDEX \
        --wallet-publish-storage-deals=$PUBLISH_STORAGE_DEALS_WALLET \
        --wallet-deal-collateral=$COLLAT_WALLET \
-       --max-staging-deals-bytes=50000000000
+       --max-staging-deals-bytes=50000000000"
+    _echo "Executing: $MIGRATE_CMD"
+    $MIGRATE_CMD
 
     # Update the lotus-miner config
     _echo "Updating lotus-miner config to disable markets"
     cp "$LOTUS_MINER_PATH""config.toml" "$LOTUS_MINER_PATH""config.toml.backup"
-    sed -i '' 's/^[ ]*#EnableMarkets = true/EnableMarkets = false/' "$LOTUS_MINER_PATH""config.toml"
+    sed -i 's/^[ ]*#[ ]*EnableMarkets = .*/EnableMarkets = false/' "$LOTUS_MINER_PATH""config.toml"
 
     # Restart lotus-miner
-    nohup lotus-miner run --nosync >> lotus-miner.log 2>&1 &
-    sleep 2
+    #nohup lotus-miner run --nosync >> /var/log/lotus-miner.log 2>&1 &
+    #sleep 2
 
-    _echo "Starting boost..."
-    boostd --vv run
+    #_echo "Starting boost..."
+    #boostd --vv run
 }
 
 function run_boost() {
