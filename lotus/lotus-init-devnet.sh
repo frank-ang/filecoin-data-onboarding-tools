@@ -10,18 +10,19 @@ export LOTUS_MINER_PATH=$HOME/.lotusminerDevnetTest/
 export LOTUS_SKIP_GENESIS_CHECK=_yes_
 export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
 export CGO_CFLAGS="-D__BLST_PORTABLE__"
-
-LOTUS_MINER_CONFIG_FILE=`pwd`"/lotusminer-autopublish-mac-config.toml"
+export BOOST_SOURCE_PATH=$HOME/lab/boost/
+export BOOST_PATH=$HOME/.boost
+export BOOST_CLIENT_PATH=$HOME/.boost-client
+TEST_CONFIG_FILE=`pwd`"/test_config.gitignore"
+LOTUS_MINER_CONFIG_FILE=`pwd`"/lotusminer-autopublish-config.toml"
 LOTUS_SOURCE=$HOME/lotus/
 LOTUS_DAEMON_LOG=${LOTUS_SOURCE}lotus-daemon.log
 LOTUS_MINER_LOG=${LOTUS_SOURCE}lotus-miner.log
-
 
 if [[ -z "$HOME" ]]; then
     echo "HOME undefined." 1>&2
     exit 1
 fi
-
 cd $HOME
 
 function _echo() {
@@ -63,8 +64,8 @@ function rebuild() {
 
     _echo "## Building lotus..."
     cd $HOME
-    rm -rf $HOME/.lotus
-    rm -rf $HOME/lotus
+    rm -rf $LOTUS_PATH
+    rm -rf $LOTUS_SOURCE
     git clone https://github.com/filecoin-project/lotus.git
     cd lotus/
     git checkout releases
@@ -76,7 +77,6 @@ function rebuild() {
     make install
     date -u
 }
-
 
 function init_daemons() {
     _echo "Initializing Daemons..."
@@ -104,6 +104,11 @@ function init_daemons() {
     nohup ./lotus-miner run --nosync >> lotus-miner.log 2>&1 &
 }
 
+function deploy_miner_config() {
+    cp -f $LOTUS_MINER_PATH/config.toml $LOTUS_MINER_PATH/config.toml.bak
+    cp -f $LOTUS_MINER_CONFIG_FILE $LOTUS_MINER_PATH/config.toml
+}
+
 function restart_daemons() {
     _echo "restarting daemons..."
     _echo "halting any existing daemons..."
@@ -125,7 +130,7 @@ function start_daemons() {
 function setup_wallets() {
     _echo "Setting up wallets..."
     lotus wallet list
-    SP_WALLET_ADDRESS=`lotus wallet list | tail -1 | cut -d' ' -f1`
+    SP_WALLET_ADDRESS=`lotus wallet list | grep "^.*X" | grep -oE "^\w*\b"` # default wallet
     _echo "SP lotus wallet address: $SP_WALLET_ADDRESS"
     CLIENT_WALLET_ADDRESS=`lotus wallet list | tail -2 | head -1 | cut -d' ' -f1`
     if [[ "$CLIENT_WALLET_ADDRESS" == "Address" ]]; then
@@ -136,6 +141,9 @@ function setup_wallets() {
     fi
     CLIENT_WALLET_ADDRESS=`lotus wallet list | tail -2 | head -1 | cut -d' ' -f1`
     _echo "client lotus wallet address: $CLIENT_WALLET_ADDRESS"
+    rm $TEST_CONFIG_FILE || true
+    echo "export SP_WALLET_ADDRESS=$SP_WALLET_ADDRESS" >> $TEST_CONFIG_FILE
+    echo "export CLIENT_WALLET_ADDRESS=$CLIENT_WALLET_ADDRESS" >> $TEST_CONFIG_FILE
 
     _echo "Sending funds into client lotus wallet..."
     lotus send --from "$SP_WALLET_ADDRESS" "$CLIENT_WALLET_ADDRESS" 1000
@@ -181,15 +189,13 @@ function _prep_test_data() {
 
 function client_lotus_deal() {
 
-    _prep_test_data
     _echo "CLIENT_WALLET_ADDRESS, DATA_CID, CAR_FILE, DATASET_NAME: $CLIENT_WALLET_ADDRESS, $DATA_CID, $CAR_FILE, $DATASET_NAME"
 
     if [[ -z "$CLIENT_WALLET_ADDRESS" || -z "$DATA_CID" || -z "$CAR_FILE" || -z "$DATASET_NAME" ]]; then
         _error "CLIENT_WALLET_ADDRESS, DATA_CID, CAR_FILE, DATASET_NAME need to be defined."
     fi
-
     _echo "CLIENT_WALLET_ADDRESS, DATA_CID, CAR_FILE, DATASET_NAME: $CLIENT_WALLET_ADDRESS, $DATA_CID, $CAR_FILE, $DATASET_NAME"
-    
+    _prep_test_data
     _echo "Importing CAR into Lotus..."
     lotus client import --car $CAR_FILE
     sleep 2
@@ -217,51 +223,6 @@ function client_lotus_deal() {
     lotus client get-deal $DEAL_ID
 }
 
-# No need to push things along manually, by setting auto-publish in config.toml.
-function miner_handle_deal_manually_deprecated() {
-    # Wait timings are fragile.
-
-    _echo "Miner handling deal..."
-    lotus-miner storage-deals list -v # dealID shows as StorageDealPublish
-    _echo "lotus-miner storage-deals pending-publish --publish-now ... "
-    lotus-miner storage-deals pending-publish  # dealID should be queued for publish
-    lotus-miner storage-deals pending-publish --publish-now
-
-    sleep 5
-
-    lotus-miner sectors list # sector in SubmitPreCommitBatch
-    # TODO get sector number, waiting in precommit batch queue
-    SECTOR_NUMBER=`lotus-miner sectors batching precommit`
-    _echo "SECTOR_NUMBER in precommit batch queue: $SECTOR_NUMBER"
-    lotus-miner sectors status $SECTOR_NUMBER | grep 'Status:' | sed 's/Status:[[:space:]]*\(.*\)/\1/g'
-
-    _echo "lotus-miner sectors batching precommit --publish-now..."
-    lotus-miner sectors batching precommit --publish-now
-
-    # sector state progresses thru PreCommitBatchWait, WaitSeed, Committing, SubmitCommitAggregate
-    sleep 5
-    lotus-miner sectors list
-    sleep 2
-    lotus-miner sectors batching commit # should show sector number.
-    sleep 3
-    _echo "lotus-miner sectors batching commit --publish-now..."
-    lotus-miner sectors batching commit --publish-now
-    sleep 3
-    lotus-miner sectors list # sector should move thru CommitAggregateWait, PrecommitWait, WaitSeed, CommitWait, Proving, FinalizeSector
-    sleep 5
-
-    # successful deal should be in StorageDealActive.  
-    lotus-miner storage-deals list -v | grep $DEAL_ID
-    lotus-miner storage-deals list --format json | jq '.'
-    # Moves into Proving stage, requires WindowPOST.
-    lotus client list-deals # still shows StorageDealCheckForAcceptance, Not on-chain.
-
-    # The deal will go Active after meeting a proving deadline.
-    lotus-miner proving deadlines
-
-}
-
-
 function retrieve() { # TODO TEST
     CID=$1
     if [[ -z "$CID" ]]; then
@@ -270,30 +231,120 @@ function retrieve() { # TODO TEST
     fi
     # following line throws error: ERR t01000@12D3KooW9sKNwEP2x5rKZojgFstGihzgGxjFNj3ukcWTVHgMh9Sm: exhausted 5 attempts but failed to open stream, err: peer:12D3KooW9sKNwEP2x5rKZojgFstGihzgGxjFNj3ukcWTVHgMh9Sm: resource limit exceeded
     # lotus client find $CID
+    rm -rf `pwd`/retrieved-out.gitignore || true
+    rm -f `pwd`/retrieved-car.gitignore || true
     lotus client retrieve --provider t01000 $CID `pwd`/retrieved.car.gitignore
     lotus client retrieve --provider t01000 --car `pwd`/$CID retrieved-car.out
 }
 
-
-function deploy_miner_config() {
-    cp -f $LOTUS_MINER_PATH/config.toml $LOTUS_MINER_PATH/config.toml.bak
-    cp -f $LOTUS_MINER_CONFIG_FILE $LOTUS_MINER_PATH/config.toml
+function retrieve_wait() {
+    CID=$1
+    RETRY_COUNT=20
+    until retrieve $CID; do
+        RETRY_COUNT=$((RETRY_COUNT-1))
+        if [[ "$RETRY_COUNT" < 1 ]]; then _error "Exhausted retrie retries"; fi
+        _echo "RETRY_COUNT: $RETRY_COUNT"
+        sleep 10
+    done
 }
 
+function full_rebuild_test() {
+    rebuild
+    init_daemons && sleep 10
+
+    killall_daemons && sleep 2
+    deploy_miner_config
+    restart_daemons
+    tail_logs && sleep 10
+
+    setup_wallets && sleep 5
+    client_lotus_deal
+    client_lotus_deal && sleep 5
+}
+
+function build_boost() {
+    _echo "📦 building boost... 📦 "
+    cd $BOOST_SOURCE_PATH/..
+    rm -rf $BOOST_SOURCE_PATH
+    git clone https://github.com/filecoin-project/boost
+    cd $BOOST_SOURCE_PATH
+    git pull
+    make clean
+    make build
+    sudo make install
+}
+
+function config_boost() {
+    _echo "📦 Configuring boost... 📦"
+
+    mv -f $BOOST_PATH $BOOST_PATH.bak || true
+    mv -f $BOOST_CLIENT_PATH $BOOST_CLIENT_PATH.bak || true
+
+    setup_wallets
+    if grep "PUBLISH_STORAGE_DEALS_WALLET" "$TEST_CONFIG_FILE"; then
+        . "$TEST_CONFIG_FILE"
+    else
+        PUBLISH_STORAGE_DEALS_WALLET=`lotus wallet new bls`
+        COLLAT_WALLET=`lotus wallet new bls`
+        _echo "PUBLISH_STORAGE_DEALS_WALLET: $PUBLISH_STORAGE_DEALS_WALLET"
+        _echo "COLLAT_WALLET: $COLLAT_WALLET"
+        echo "export PUBLISH_STORAGE_DEALS_WALLET=$PUBLISH_STORAGE_DEALS_WALLET" >> $TEST_CONFIG_FILE
+        echo "export COLLAT_WALLET: $COLLAT_WALLET" >> $TEST_CONFIG_FILE
+        lotus send --from $SP_WALLET_ADDRESS $PUBLISH_STORAGE_DEALS_WALLET 10
+        lotus send --from $SP_WALLET_ADDRESS $COLLAT_WALLET 10
+        sleep 15 # takes some time... actor not found, requires chain sync so the new wallet addresses can be found.
+        _echo "PUBLISH_STORAGE_DEALS_WALLET balance: "`lotus wallet balance $PUBLISH_STORAGE_DEALS_WALLET`
+        _echo "COLLAT_WALLET balance: "`lotus wallet balance $COLLAT_WALLET`
+    fi
+
+    echo "migrating monolithic lotus-miner to boost"
+    # Set the publish storage deals wallet as a control wallet.
+    export OLD_CONTROL_ADDRESS=`lotus-miner actor control list  --verbose | awk '{print $3}' | grep -v key | tr -s '\n'  ' '`
+    lotus-miner actor control set --really-do-it $PUBLISH_STORAGE_DEALS_WALLET $OLD_CONTROL_ADDRESS
+
+    export $(lotus auth api-info --perm=admin) #FULLNODE_API_INFO
+    export $(lotus-miner auth api-info --perm=admin) #MINER_API_INFO
+    export APISEALER=`lotus-miner auth api-info --perm=admin` 
+    export APISECTORINDEX=`lotus-miner auth api-info --perm=admin` 
+    ulimit -n 1048576
+
+    _echo "shutting down lotus-miner..."
+    lotus-miner stop || true
+    sleep 3
+
+    _echo "Backup the lotus-miner repository..."
+    cp -rf "$LOTUS_MINER_PATH" "${LOTUS_MINER_PATH%/}.bak"
+    # Backup the lotus-miner datastore (in case you decide to roll back from Boost to Lotus) with: lotus-shed market export-datastore --repo <repo> --backup-dir <backup-dir>
+
+    # migrate lotus-markets
+    boostd --vv migrate-monolith \
+       --import-miner-repo="$LOTUS_MINER_PATH" \
+       --api-sealer=$APISEALER \
+       --api-sector-index=$APISECTORINDEX \
+       --wallet-publish-storage-deals=$PUBLISH_STORAGE_DEALS_WALLET \
+       --wallet-deal-collateral=$COLLAT_WALLET \
+       --max-staging-deals-bytes=50000000000
+
+    # Update the lotus-miner config
+    _echo "Updating lotus-miner config to disable markets"
+    cp "$LOTUS_MINER_PATH""config.toml" "$LOTUS_MINER_PATH""config.toml.backup"
+    sed -i '' 's/^[ ]*#EnableMarkets = true/EnableMarkets = false/' "$LOTUS_MINER_PATH""config.toml"
+
+    # Restart lotus-miner
+    nohup lotus-miner run --nosync >> lotus-miner.log 2>&1 &
+    sleep 2
+
+    _echo "Starting boost..."
+    boostd --vv run
+}
+
+function run_boost() {
+    killall_daemons && sleep 2
+    restart_daemons && sleep 3
+    boostd --vv run
+}
 
 # Execute function from parameters
 $@
-
-#_killall_daemons
-#rebuild
-#init_daemons && sleep 10
-#restart_daemons
-
-setup_wallets && sleep 5
-
-client_lotus_deal
-
-#client_lotus_deal && sleep 5
-#miner_handle_deal
 
 _echo "Lotus Linux devnet test completed: $0"
