@@ -40,12 +40,13 @@ function _waitLotusStartup() {
     t=${1:-"120s"} # note trailing "s"
     echo "## Waiting for lotus startup, timeout $t..."
     lotus wait-api --timeout $t
-    lotus status || _error "timeout waiting for lotus startup."
+    # redundant # lotus status || _error "timeout waiting for lotus startup."
 }
 
 function _killall_daemons() {
     lotus-miner stop || true
     lotus daemon stop || true
+    stop_singularity || true
 }
 
 
@@ -87,7 +88,7 @@ function init_daemons() {
     rm -rf $LOTUS_PATH
     rm -rf $LOTUS_MINER_PATH
     rm -rf ~/.genesis-sectors
-    cd $LOTUS_SOURCE && _echo "Fetching parameters..." #
+    cd $LOTUS_SOURCE && _echo "Fetching parameters..."
     time ./lotus fetch-params 2048
     _echo "Pre-seal some sectors for the genesis block..."
     time ./lotus-seed pre-seal --sector-size 2KiB --num-sectors 2
@@ -129,6 +130,21 @@ function start_daemons() {
     nohup lotus-miner run --nosync >> /var/log/lotus-miner.log 2>&1 &
     lotus-miner wait-api --timeout 300s
     _echo "Daemons started."
+}
+
+function start_boost() {
+    boostd --vv run
+}
+
+
+function start_singularity() {
+    _echo "Starting singularity daemon..."
+    nohup singularity daemon 2>&1 >> /var/log/singularity.log &
+    sleep 5 && singularity prep list
+}
+
+function stop_singularity() {
+    pkill -f 'node.*singularity'
 }
 
 # Setup SP_WALLET_ADDRESS, CLIENT_WALLET_ADDRESS
@@ -217,12 +233,10 @@ function client_lotus_deal() {
     PRICE=0.000000000000001
     DURATION=518400 # 180 days
 
-    _echo "Client Dealing... "
     DEAL_CMD="lotus client deal --from $CLIENT_WALLET_ADDRESS $DATA_CID $MINERID $PRICE $DURATION"
-    _echo "Executing: $DEAL_CMD"
+    _echo "Client Dealing... executing: $DEAL_CMD"
     DEAL_ID=`$DEAL_CMD`
     _echo "DEAL_ID: $DEAL_ID"
-
     sleep 2
     lotus client list-deals --show-failed -v                                                                   
     lotus client get-deal $DEAL_ID
@@ -303,7 +317,7 @@ function config_boost() {
     fi
 
     _echo "Setting the publish storage deals wallet as a control wallet..."
-    export OLD_CONTROL_ADDRESS=`lotus-miner actor control list  --verbose | awk '{print $3}' | grep -v key | tr -s '\n'  ' '`
+    OLD_CONTROL_ADDRESS=`lotus-miner actor control list  --verbose | awk '{print $3}' | grep -v key | tr -s '\n'  ' '`
     lotus-miner actor control set --really-do-it $PUBLISH_STORAGE_DEALS_WALLET $OLD_CONTROL_ADDRESS
 
     export $(lotus auth api-info --perm=admin) #FULLNODE_API_INFO
@@ -321,7 +335,7 @@ function config_boost() {
     # Backup the lotus-miner datastore (in case you decide to roll back from Boost to Lotus) with: lotus-shed market export-datastore --repo <repo> --backup-dir <backup-dir>
 
     # migrate lotus-markets
-    export $(lotus auth api-info --perm=admin)
+    export $(lotus auth api-info --perm=admin) # FULLNODE_API_INFO
     _echo "Migrating monolithic lotus-miner to boost"
     MIGRATE_CMD="boostd --vv migrate-monolith \
        --import-miner-repo="$LOTUS_MINER_PATH" \
@@ -329,27 +343,33 @@ function config_boost() {
        --api-sector-index=$APISECTORINDEX \
        --wallet-publish-storage-deals=$PUBLISH_STORAGE_DEALS_WALLET \
        --wallet-deal-collateral=$COLLAT_WALLET \
-       --max-staging-deals-bytes=50000000000"
+       --max-staging-deals-bytes=50000000000" # Maybe add --nosync flag??
     _echo "Executing: $MIGRATE_CMD"
-    $MIGRATE_CMD
+    # TODO investigate: keeps looping "Checking full node sync status", until manual interrupt Ctrl-C to continue. 
+    $MIGRATE_CMD 
 
-    # Update the lotus-miner config
     _echo "Updating lotus-miner config to disable markets"
     cp "$LOTUS_MINER_PATH""config.toml" "$LOTUS_MINER_PATH""config.toml.backup"
     sed -i 's/^[ ]*#[ ]*EnableMarkets = .*/EnableMarkets = false/' "$LOTUS_MINER_PATH""config.toml"
 
-    # Restart lotus-miner
-    #nohup lotus-miner run --nosync >> /var/log/lotus-miner.log 2>&1 &
-    #sleep 2
+    _echo "Starting lotus-miner..."
+    nohup lotus-miner run --nosync >> /var/log/lotus-miner.log 2>&1 &
+    lotus-miner wait-api --timeout 30s
 
-    #_echo "Starting boost..."
-    #boostd --vv run
+    _echo "Starting boost..."
+    # Observation: 1st time running this manually, instantiates new boost node, 
+    nohup boostd --vv run --nosync >> /var/log/boostd.log 2>&1 &
 }
 
-function run_boost() {
-    killall_daemons && sleep 2
-    restart_daemons && sleep 3
-    boostd --vv run
+function setup_boost_ui() {
+    cd $BOOST_SOURCE_PATH/react
+    npm install --legacy-peer-deps
+    npm run build
+    npm install -g serve
+    nohup serve -s build >> /var/log/boost-ui.log 2>&1 &
+    # Browser Access: http://localhost:8080 , via SSH tunnel ssh -L 8080:localhost:8080 myserver
+    # API Access: requires BOOST_API_INFO environment variable
+    export $(boostd auth api-info -perm admin) # TODO: what next?
 }
 
 # Execute function from parameters
