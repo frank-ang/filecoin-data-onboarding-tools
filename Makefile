@@ -56,3 +56,4 @@ connect_boost:
 	open -n -a "Google Chrome" --args '--new-window' "http://${AWS_APPLIANCE_IP}:3000"
 # TODO: investigate UX error: Error: Unexpected token '<', "<!doctype "... is not valid JSON
 # ssh -L 3000:localhost:3000 ubuntu@${AWS_APPLIANCE_IP}
+# ssh ubuntu@${AWS_APPLIANCE_IP} -L 3001:${AWS_APPLIANCE_IP}:3000 -fN

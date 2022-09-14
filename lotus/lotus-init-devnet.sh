@@ -7,8 +7,8 @@
 # https://lotus.filecoin.io/lotus/install/linux/#building-from-source
 
 set -e
-export LOTUS_PATH=$HOME/.lotusDevnetTest/
-export LOTUS_MINER_PATH=$HOME/.lotusminerDevnetTest/
+export LOTUS_PATH=$HOME/.lotus # $HOME/.lotusDevnetTest/
+export LOTUS_MINER_PATH=$HOME/.lotusminer # $HOME/.lotusminerDevnetTest/
 export LOTUS_SKIP_GENESIS_CHECK=_yes_
 export CGO_CFLAGS_ALLOW="-D__BLST_PORTABLE__"
 export CGO_CFLAGS="-D__BLST_PORTABLE__"
@@ -107,6 +107,7 @@ function init_daemons() {
     _echo "Starting the miner..."
     nohup ./lotus-miner run --nosync >> /var/log/lotus-miner.log 2>&1 &
 }
+
 
 function deploy_miner_config() {
     cp -f $LOTUS_MINER_PATH/config.toml $LOTUS_MINER_PATH/config.toml.bak
@@ -289,7 +290,8 @@ function build_boost() {
     cd boost
     git pull
     make clean
-    make build
+    # make build # mainnet
+    make debug # devnet
     sudo make install
 }
 
@@ -297,7 +299,6 @@ function config_boost() {
     _echo "📦 Configuring boost... 📦"
 
     mv -f $BOOST_PATH $BOOST_PATH.bak || true
-    mv -f $BOOST_CLIENT_PATH $BOOST_CLIENT_PATH.bak || true
 
     if grep "PUBLISH_STORAGE_DEALS_WALLET" "$TEST_CONFIG_FILE"; then
         _echo "reusing PUBLISH_STORAGE_DEALS_WALLET from $TEST_CONFIG_FILE"
@@ -308,7 +309,7 @@ function config_boost() {
         _echo "PUBLISH_STORAGE_DEALS_WALLET: $PUBLISH_STORAGE_DEALS_WALLET"
         _echo "COLLAT_WALLET: $COLLAT_WALLET"
         echo "export PUBLISH_STORAGE_DEALS_WALLET=$PUBLISH_STORAGE_DEALS_WALLET" >> $TEST_CONFIG_FILE
-        echo "export COLLAT_WALLET: $COLLAT_WALLET" >> $TEST_CONFIG_FILE
+        echo "export COLLAT_WALLET=$COLLAT_WALLET" >> $TEST_CONFIG_FILE
         lotus send --from $SP_WALLET_ADDRESS $PUBLISH_STORAGE_DEALS_WALLET 10
         lotus send --from $SP_WALLET_ADDRESS $COLLAT_WALLET 10
         sleep 15 # takes some time... actor not found, requires chain sync so the new wallet addresses can be found.
@@ -328,7 +329,7 @@ function config_boost() {
 
     _echo "shutting down lotus-miner..."
     lotus-miner stop || true
-    sleep 3
+    sleep 5
 
     _echo "Backup the lotus-miner repository..."
     cp -rf "$LOTUS_MINER_PATH" "${LOTUS_MINER_PATH%/}.bak"
@@ -345,8 +346,8 @@ function config_boost() {
        --wallet-deal-collateral=$COLLAT_WALLET \
        --max-staging-deals-bytes=50000000000" # Maybe add --nosync flag??
     _echo "Executing: $MIGRATE_CMD"
-    # TODO investigate: keeps looping "Checking full node sync status", until manual interrupt Ctrl-C to continue. 
-    $MIGRATE_CMD 
+    # Keeps looping "Checking full node sync status", until manual interrupt Ctrl-C SIGINT to continue. 
+    timeout -s SIGINT 10 $MIGRATE_CMD 
 
     _echo "Updating lotus-miner config to disable markets"
     cp "$LOTUS_MINER_PATH""config.toml" "$LOTUS_MINER_PATH""config.toml.backup"
@@ -354,7 +355,7 @@ function config_boost() {
 
     _echo "Starting lotus-miner..."
     nohup lotus-miner run --nosync >> /var/log/lotus-miner.log 2>&1 &
-    lotus-miner wait-api --timeout 30s
+    lotus-miner wait-api --timeout 300s
 
     _echo "Starting boost..."
     # Observation: 1st time running this manually, instantiates new boost node, 
@@ -362,6 +363,7 @@ function config_boost() {
 }
 
 function setup_boost_ui() {
+    _echo "📦 Setting up Boost UI 📦"
     cd $BOOST_SOURCE_PATH/react
     npm install --legacy-peer-deps
     npm run build
@@ -369,8 +371,48 @@ function setup_boost_ui() {
     nohup serve -s build >> /var/log/boost-ui.log 2>&1 &
     # Browser Access: http://localhost:8080 , via SSH tunnel ssh -L 8080:localhost:8080 myserver
     # API Access: requires BOOST_API_INFO environment variable
-    export $(boostd auth api-info -perm admin) # TODO: what next?
+    # Demonstration of API Access
+    sleep 2
+    export $(boostd auth api-info -perm admin)
+    curl -s -X POST -H "Content-Type: application/json" -d '{"query":"query {epoch { Epoch }}"}' http://localhost:8080/graphql/query 
 }
+
+function setup_boost_client() {
+    _echo "📦 Setting up Boost Client 📦"
+    rm -rf $BOOST_CLIENT_PATH.bak && mv -f $BOOST_CLIENT_PATH $BOOST_CLIENT_PATH.bak || true
+    export $(lotus auth api-info --perm=admin) # FULLNODE_API_INFO
+    boost -vv init
+    sleep 15
+    fund_boost_client_wallet
+}
+
+function fund_boost_client_wallet() {
+    export $(lotus auth api-info --perm=admin) # FULLNODE_API_INFO
+    _echo "Funding Boost Client wallet..."
+    SP_WALLET_ADDRESS=`lotus wallet list | grep "^.*X" | grep -oE "^\w*\b"` # default wallet
+    export BOOST_CLIENT_WALLET=`boost wallet list | grep -o 'f3.[^\S]*' | tr -d '\n'`
+    _echo "SP_WALLET_ADDRESS: $SP_WALLET_ADDRESS"
+    _echo "BOOST_CLIENT_WALLET: $BOOST_CLIENT_WALLET" # TODO its a mainnet f3, not a t3 address.
+    _echo "Adding funds to BOOST_CLIENT_WALLET: $BOOST_CLIENT_WALLET from SP_WALLET_ADDRESS: $SP_WALLET_ADDRESS"
+    lotus send --from "$SP_WALLET_ADDRESS" "$BOOST_CLIENT_WALLET" 10
+    _echo "Adding funds to market actor..."
+    boostx market-add 1
+}
+
+function boost_devnet() {
+    echo "setting up boost_devnet..."
+    rm -rf ~/.lotusmarkets ~/.lotus ~/.lotusminer ~/.genesis_sectors
+    rm -rf ~/.boost
+    rm -rf $LOTUS_PATH $LOTUS_MINER_PATH $BOOST_PATH $BOOST_CLIENT_PATH
+    cd $LOTUS_SOURCE
+    git checkout releases
+    make debug
+    sudo make install
+    install -C ./lotus-seed /usr/local/bin/lotus-seed
+    # TODO WIP
+    _error "TODO incomplete"
+}
+
 
 # Execute function from parameters
 $@
