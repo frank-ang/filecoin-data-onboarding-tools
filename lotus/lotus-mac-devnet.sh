@@ -122,18 +122,15 @@ function tail_logs() {
 
 function setup_wallets() {
     _echo "📦Setting up wallets..📦."
-    lotus wallet list
     SP_WALLET_ADDRESS=`lotus wallet list | grep "^.*X" | grep -oE "^\w*\b"` # default wallet
-    _echo "SP lotus wallet address: $SP_WALLET_ADDRESS"
+    _echo "SP lotus wallet address=$SP_WALLET_ADDRESS"
     CLIENT_WALLET_ADDRESS=`lotus wallet list | tail -2 | head -1 | cut -d' ' -f1`
     if [[ "$CLIENT_WALLET_ADDRESS" == "Address" ]]; then
-        _echo "No client wallet found. Creating new wallet..."
-        lotus wallet new
+        CLIENT_WALLET_ADDRESS=`lotus wallet new`
+        _echo "No previous client wallet found. Creating new CLIENT_WALLET_ADDRESS=$CLIENT_WALLET_ADDRESS"
     else
-        _echo "Found pre-existing client wallet."
+        _echo "Found pre-existing client wallet: $CLIENT_WALLET_ADDRESS"
     fi
-    CLIENT_WALLET_ADDRESS=`lotus wallet list | tail -2 | head -1 | cut -d' ' -f1`
-    _echo "client lotus wallet address: $CLIENT_WALLET_ADDRESS"
     rm $TEST_CONFIG_FILE || true
     echo "export SP_WALLET_ADDRESS=$SP_WALLET_ADDRESS" >> $TEST_CONFIG_FILE
     echo "export CLIENT_WALLET_ADDRESS=$CLIENT_WALLET_ADDRESS" >> $TEST_CONFIG_FILE
@@ -223,28 +220,56 @@ function build_boost() {
     sudo make install
 }
 
-function config_boost() {
-    _echo "📦 Configuring boost... 📦"
+function setup_boost_wallets() {
+    _echo "📦 Setting up boost wallets ... 📦"
+    _echo "Reading any pre-configured Boost wallets from config file..."
+    unset COLLAT_WALLET
+    unset PUBMSG_WALLET
+    unset CLIENT_WALLET
+    DEFAULT_WALLET=`lotus wallet list | tail -1 | awk '{print $1}'`
+    . "$TEST_CONFIG_FILE"
+
+    if [[ -z "$CLIENT_WALLET" ]]; then
+        _echo 'setting up new CLIENT_WALLET...'
+        export CLIENT_WALLET=`lotus wallet new bls`
+        echo "export CLIENT_WALLET=$CLIENT_WALLET" >> $TEST_CONFIG_FILE
+    fi
+    if [[ -z "$COLLAT_WALLET" ]]; then
+        _echo 'setting up new COLLAT_WALLET...'
+        export COLLAT_WALLET=`lotus wallet new bls`
+        echo "export COLLAT_WALLET=$COLLAT_WALLET" >> $TEST_CONFIG_FILE
+    fi
+    if [[ -z "$PUBMSG_WALLET" ]]; then
+        _echo 'setting up new PUBMSG_WALLET...'
+        export PUBMSG_WALLET=`lotus wallet new bls`
+        echo "export PUBMSG_WALLET=$PUBMSG_WALLET" >> $TEST_CONFIG_FILE
+    fi
+    lotus send --from $DEFAULT_WALLET $CLIENT_WALLET 10
+    lotus send --from $DEFAULT_WALLET $COLLAT_WALLET 10
+    lotus send --from $DEFAULT_WALLET $PUBMSG_WALLET 10
+
+    _echo "Sending funds..."
+    _echo "DEFAULT_WALLET: $DEFAULT_WALLET , balance:"`lotus wallet balance $DEFAULT_WALLET`
+    _echo "COLLAT_WALLET:$COLLAT_WALLET , balance:"`lotus wallet balance $COLLAT_WALLT`
+    _echo "CLIENT_WALLET: $CLIENT_WALLET , balance:"`lotus wallet balance $CLIENT_WALLET`
+    _echo "PUBMSG_WALLET: $PUBMSG_WALLET , balance:"`lotus wallet balance $PUBMSG_WALLET`
+
+    _echo "Setting Miner Actor control set"
+    lotus-miner actor control set --really-do-it $PUBMSG_WALLET
+
+    _echo "Setting wallets market..."
+    lotus wallet market add --from $DEFAULT_WALLET --address $CLIENT_WALLET 5
+    lotus wallet market add --address $COLLAT_WALLET 5
+}
+
+function config_migrate_boost() {
+    _echo "📦 Migrating market node to boost... 📦"
 
     mv -f $BOOST_PATH $BOOST_PATH.bak || true
     mv -f $BOOST_CLIENT_PATH $BOOST_CLIENT_PATH.bak || true
 
     setup_wallets
-    if grep "PUBLISH_STORAGE_DEALS_WALLET" "$TEST_CONFIG_FILE"; then
-        . "$TEST_CONFIG_FILE"
-    else
-        PUBLISH_STORAGE_DEALS_WALLET=`lotus wallet new bls`
-        COLLAT_WALLET=`lotus wallet new bls`
-        _echo "PUBLISH_STORAGE_DEALS_WALLET: $PUBLISH_STORAGE_DEALS_WALLET"
-        _echo "COLLAT_WALLET: $COLLAT_WALLET"
-        echo "export PUBLISH_STORAGE_DEALS_WALLET=$PUBLISH_STORAGE_DEALS_WALLET" >> $TEST_CONFIG_FILE
-        echo "export COLLAT_WALLET: $COLLAT_WALLET" >> $TEST_CONFIG_FILE
-        lotus send --from $SP_WALLET_ADDRESS $PUBLISH_STORAGE_DEALS_WALLET 10
-        lotus send --from $SP_WALLET_ADDRESS $COLLAT_WALLET 10
-        sleep 15 # takes some time... actor not found, requires chain sync so the new wallet addresses can be found.
-        _echo "PUBLISH_STORAGE_DEALS_WALLET balance: "`lotus wallet balance $PUBLISH_STORAGE_DEALS_WALLET`
-        _echo "COLLAT_WALLET balance: "`lotus wallet balance $COLLAT_WALLET`
-    fi
+    setup_boost_wallets
 
     echo "migrating monolithic lotus-miner to boost"
     # Set the publish storage deals wallet as a control wallet.
@@ -254,7 +279,7 @@ function config_boost() {
     export $(lotus auth api-info --perm=admin) #FULLNODE_API_INFO
     export $(lotus-miner auth api-info --perm=admin) #MINER_API_INFO
     export APISEALER=`lotus-miner auth api-info --perm=admin` 
-    export APISECTORINDEX=`lotus-miner auth api-info --perm=admin` 
+    export APISECTORINDEX=`lotus-miner auth api-info --perm=admin`
     ulimit -n 1048576
 
     _echo "shutting down lotus-miner..."
@@ -307,8 +332,7 @@ function full_rebuild_test() {
     client_lotus_deal && sleep 5
 }
 
-# Devnet README. https://github.com/filecoin-project/boost/blob/3976945354856f34ac7004dabfb353b579254ab4/README.md#running-boost-for-development
-function build_start_devnet() {
+function build_boost_devnet() {
     _echo "building boost devnet"
     rm -rf ~/.lotusmarkets ~/.lotus ~/.lotusminer ~/.genesis_sectors
     rm -rf ~/.boost
@@ -317,7 +341,7 @@ function build_start_devnet() {
     git checkout releases
     _echo "Making lotus debug..."
     make debug
-    _echo "installing lotus..."
+    _echo "installing lotus... (will prompt for permissions)"
     sudo make install
     _echo "installing lotus-seed..."
     sudo install -C ./lotus-seed /usr/local/bin/lotus-seed
@@ -325,122 +349,103 @@ function build_start_devnet() {
     cd $BOOST_SOURCE_PATH
     make debug
     sudo make install
+}
 
+# Devnet README. https://github.com/filecoin-project/boost/blob/3976945354856f34ac7004dabfb353b579254ab4/README.md#running-boost-for-development
+function build_start_devnet() {
+    # build_boost_devnet
+    start_devnet
+    config_boost
+    configure_devnet
+}
+
+function start_devnet() {
     _echo "starting boost devnet..."
-    ./devnet >> ./devnet.log &
+    unset MINER_API_INFO
+    unset FULLNODE_API_INFO
+    export ENV_MINER_API_INFO=`lotus-miner auth api-info --perm=admin` # errors here
+    export ENV_FULLNODE_API_INFO=`lotus auth api-info --perm=admin`
+    _echo "ENV_MINER_API_INFO=$ENV_MINER_API_INFO"
+    _echo "ENV_FULLNODE_API_INFO=$ENV_FULLNODE_API_INFO"
+
+    export MINER_API_INFO=`echo $ENV_MINER_API_INFO | awk '{split($0,a,"="); print a[2]}'`
+    export FULLNODE_API_INFO=`echo $ENV_FULLNODE_API_INFO | awk '{split($0,a,"="); print a[2]}'`
+
+    _echo "MINER_API_INFO=$MINER_API_INFO"
+    _echo "FULLNODE_API_INFO=$FULLNODE_API_INFO"
+
+    nohup $BOOST_SOURCE_PATH/devnet >> $BOOST_SOURCE_PATH/devnet.log 2>&1 &
     sleep 10
-    post_install_devnet
+    wait_devnet_start
+}
+
+function wait_devnet_start() {
+    _echo "waiting for lotus to start..."
+    lotus wait-api --timeout 120s || _error "timeout waiting for lotus node startup."
+    lotus status
+    _echo "waiting for miner to start..."
+    lotus-miner wait-api --timeout 300s || _error "timeout waiting for lotus miner startup."
+    lotus-miner auth api-info --perm=admin
 }
 
 function restart_devnet() {
     
-    # The devnet isn't designed to be restartable. 
-    # After it has been successfully run once, you'll have to clear out the previous data before re-running ./devnet:
+    _echo "Restarting devnet..."
+    # The devnet isn't designed to be restartable.
+    # After it has been successfully run once,
+    # you'll have to clear out the previous data before re-running ./devnet
     unset MINER_API_INFO
     unset FULLNODE_API_INFO
-    #export ENV_MINER_API_INFO=`lotus-miner auth api-info --perm=admin`
-    #export ENV_FULLNODE_API_INFO=`lotus auth api-info --perm=admin`
-
-    #export MINER_API_INFO=`echo $ENV_MINER_API_INFO | awk '{split($0,a,"="); print a[2]}'`
-    #export FULLNODE_API_INFO=`echo $ENV_FULLNODE_API_INFO | awk '{split($0,a,"="); print a[2]}'`
-
-    #_echo "MINER_API_INFO=$MINER_API_INFO"
-    #_echo "FULLNODE_API_INFO=$FULLNODE_API_INFO"
-
-    killall_daemons
+    killall devnet && sleep 2 || true
     rm -rf ~/.lotusmarkets && rm -rf ~/.lotus && rm -rf ~/.lotusminer && rm -rf ~/.genesis_sectors
-    rm -rf $LOTUS_PATH $LOTUS_MINER_PATH $BOOST_PATH $BOOST_CLIENT_PATH
-
+    rm -rf $LOTUS_PATH $LOTUS_MINER_PATH $BOOST_PATH $BOOST_CLIENT_PATH=
     _echo "Starting boost devnet..."
-    cd $BOOST_SOURCE_PATH
-    ./devnet >> ./devnet.log &
-    echo "Waiting for devnet startup..."
-    lotus wait-api --timeout 60s
-    lotus status || _error "timeout waiting for lotus startup."
-    lotus-miner wait-api --timeout 300s
-    lotus-miner auth api-info --perm=admin
-    echo "Devnet started-up..."
+    $BOOST_SOURCE_PATH/devnet # blocking.
+    #$BOOST_SOURCE_PATH/devnet >> $BOOST_SOURCE_PATH/devnet.log &
+    # wait_devnet_start
 }
 
 
-function post_install_devnet() {
-    _echo "post-install devnet..."
+function configure_devnet() {
+    setup_boost_wallets
+    _echo "post-install configure devnet..."
+    _echo MINER_API_INFO=$MINER_API_INFO
+    _echo FULLNODE_API_INFO=$FULLNODE_API_INFO
+
     unset MINER_API_INFO
     unset FULLNODE_API_INFO
     export ENV_MINER_API_INFO=`lotus-miner auth api-info --perm=admin`
     export ENV_FULLNODE_API_INFO=`lotus auth api-info --perm=admin`
     export MINER_API_INFO=`echo $ENV_MINER_API_INFO | awk '{split($0,a,"="); print a[2]}'`
     export FULLNODE_API_INFO=`echo $ENV_FULLNODE_API_INFO | awk '{split($0,a,"="); print a[2]}'`
-    echo MINER_API_INFO=$MINER_API_INFO
-    echo FULLNODE_API_INFO=$FULLNODE_API_INFO
+    _echo MINER_API_INFO=$MINER_API_INFO
+    _echo FULLNODE_API_INFO=$FULLNODE_API_INFO
 
-    export DEFAULT_WALLET=`lotus wallet list | tail -1 | awk '{print $1}'`
-    export COLLAT_WALLET=`lotus wallet new bls`
-    export PUBMSG_WALLET=`lotus wallet new bls`
-    export CLIENT_WALLET=`lotus wallet new bls`
-
-    echo DEFAULT_WALLET=$DEFAULT_WALLET
-    echo COLLAT_WALLET=$COLLAT_WALLET
-    echo PUBMSG_WALLET=$PUBMSG_WALLET
-    echo CLIENT_WALLET=$CLIENT_WALLET
-
-    lotus wallet list
-    _echo "setting: lotus-miner actor control set"
-    lotus-miner actor control set --really-do-it $PUBMSG_WALLET
-
-    _echo "Sending funds..."
-
-    lotus send --from $DEFAULT_WALLET $COLLAT_WALLET 10
-    lotus send --from $DEFAULT_WALLET $PUBMSG_WALLET 10
-    lotus send --from $DEFAULT_WALLET $CLIENT_WALLET 10
-
-    _echo "setting wallets market..."
-    lotus wallet market add --from $DEFAULT_WALLET --address $CLIENT_WALLET 5
-    lotus wallet market add --address $COLLAT_WALLET 5
-
-    _echo "Initializing up Boost..."
-    boostd -vv init \
-    --api-sealer=$MINER_API_INFO \
-    --api-sector-index=$MINER_API_INFO \
-    --wallet-publish-storage-deals=$PUBMSG_WALLET \
-    --wallet-deal-collateral=$COLLAT_WALLET \
-    --max-staging-deals-bytes=2000000000
-
-    lotus wallet list
+   # _echo "Initializing up Boost..."
+   # TODO skipping because devnet
+   # boostd -vv init \
+   # --api-sealer=$MINER_API_INFO \
+   # --api-sector-index=$MINER_API_INFO \
+   # --wallet-publish-storage-deals=$PUBMSG_WALLET \
+   #--wallet-deal-collateral=$COLLAT_WALLET \
+   #--max-staging-deals-bytes=2000000000
     
     make react
 
-
-    _echo "done with post_install_devnet."
+    _echo "done with configure_devnet."
 
     _echo "building UI.."
     make react
     _echo "setting actor control set..."
     lotus-miner actor control set --really-do-it $PUBMSG_WALLET
 
-    # NOTE mac has additional empty param.
+    # NOTE mac has additional empty param to sed.
     sed -i '' 's/^[ ]*#EnableMarkets = true/EnableMarkets = false/' "$LOTUS_MINER_PATH""config.toml"
     sed -i '' 's|^[ ]*#ListenAddresses *= \[.*|ListenAddress = \["/ip4/0.0.0.0/tcp/50000", "/ip6/::/tcp/0"\]|' "$LOTUS_MINER_PATH""config.toml"
 
 }
 
-
-
-
 # Execute a function name from CLI parameters
 $@
-
-## retrieve $ROOT_CID
-# retrieve bafybeicgcmnbeg6ftpmlbkynnvv7pp77ddgq5nglbju7zp26py4di7bmgy
-# ROOT_CID=bafybeiheusdoo3wdn3zvpaoprp2tzygydlh2bsvhyisasldre3obfjofii
-#retrieve $ROOT_CID
-
-# BOOST SETUP
-# killall_daemons
-# build_boost
-# restart_daemons
-# config_boost
-
-#### TODO next idea: Deal using Boost and Singularity.
 
 _echo "Lotus Mac devnet test completed: $0"
