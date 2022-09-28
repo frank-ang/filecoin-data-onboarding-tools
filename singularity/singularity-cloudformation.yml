@@ -233,7 +233,7 @@ Resources:
 
           # Lotus build, init, start daemon, verify.
           cd $HOME/singularity-integ-test/lotus
-          nohup ./lotus-init-devnet.sh >> ../lotus-init-devnet.log 2>&1 &
+          nohup ./lotus-init-devnet.sh do_docker >> ../lotus-init-devnet.log 2>&1 &
 
           # All done, signal success.
           echo "## Signaling successful to CloudFormation."
