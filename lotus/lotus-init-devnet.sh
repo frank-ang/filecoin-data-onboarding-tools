@@ -148,6 +148,50 @@ function stop_singularity() {
     pkill -f 'node.*singularity'
 }
 
+function docker_boost_setup() {
+    _echo "Installing prereqs for Docker."
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+    apt-get install apt-transport-https ca-certificates curl gnupg-agent software-properties-common 
+    # Ignoring failure: E: The repository 'https://download.docker.com/linux/ubuntu \ Release' does not have a Release file.
+    add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu/ $(lsb_release -cs) stable" || true
+    apt-get update
+    apt-get install docker-ce docker-ce-cli containerd.io
+    which docker
+    mkdir -p $HOME/.docker/cli-plugins/
+    curl -SL https://github.com/docker/compose/releases/download/v2.3.3/docker-compose-linux-x86_64 -o ~/.docker/cli-plugins/docker-compose
+    chmod +x ~/.docker/cli-plugins/docker-compose
+    docker compose version
+}
+
+function docker_boost_build() {
+    _echo "Building docker images. Please be patient...  fresh docker build could exceed 45 mins."
+    cd $BOOST_SOURCE_PATH
+    export DOCKER_DEFAULT_PLATFORM=linux/amd64 # if building on Mac.
+    time make docker/all # Macbook Apple Silicon: 46m / EC2 r2.xlarge: 14m
+    _echo "Available images: " && docker images | grep filecoin
+}
+
+function docker_boost_run() {
+    _echo "Starting boost docker devnet..."
+    cd $BOOST_SOURCE_PATH/docker/devnet
+    docker compose up -d
+}
+
+
+function docker_trace() {
+    cd $BOOST_SOURCE_PATH/docker/devnet
+    docker compose logs -f
+}
+
+function docker_stop() {
+    _echo "Stopping devnet..."
+    cd $BOOST_SOURCE_PATH/docker/devnet
+    docker compose down --rmi local
+    rm -rf ./data
+    rm -rf /var/tmp/filecoin-proof-parameters
+    # docker system prune
+}
+
 # Setup SP_WALLET_ADDRESS, CLIENT_WALLET_ADDRESS
 function setup_wallets() {
     _echo "Setting up wallets..."
@@ -413,6 +457,12 @@ function boost_devnet() {
     _error "TODO incomplete"
 }
 
+function do_docker() {
+    docker_boost_setup
+    docker_boost_build
+    docker_boost_run
+    # docker compose exec boost /bin/bash
+}
 
 # Execute function from parameters
 $@

@@ -57,3 +57,7 @@ connect_boost:
 # TODO: investigate UX error: Error: Unexpected token '<', "<!doctype "... is not valid JSON
 # ssh -L 3000:localhost:3000 ubuntu@${AWS_APPLIANCE_IP}
 # ssh ubuntu@${AWS_APPLIANCE_IP} -L 3001:${AWS_APPLIANCE_IP}:3000 -fN
+
+tunnel_to_appliance:
+	@echo "Starting local TCP tunnel to: ${AWS_APPLIANCE_IP}"
+	sudo ssh -L 8080:127.0.0.1:8080 ubuntu@${AWS_APPLIANCE_IP}
