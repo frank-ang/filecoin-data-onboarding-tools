@@ -55,7 +55,7 @@ function rebuild() {
     _killall_daemons
 
     _echo "## Installing prereqs..."
-    apt install mesa-opencl-icd ocl-icd-opencl-dev gcc git bzr jq pkg-config curl clang build-essential hwloc libhwloc-dev wget -y && sudo apt upgrade -y
+    apt install -y mesa-opencl-icd ocl-icd-opencl-dev gcc git bzr jq pkg-config curl clang build-essential hwloc libhwloc-dev wget && sudo apt upgrade -y
 
     _echo "## Installing rust..."
     curl https://sh.rustup.rs -sSf > RUSTUP.sh
@@ -151,11 +151,11 @@ function stop_singularity() {
 function docker_boost_setup() {
     _echo "Installing prereqs for Docker."
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-    apt-get install apt-transport-https ca-certificates curl gnupg-agent software-properties-common 
+    apt install -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common
     # Ignoring failure: E: The repository 'https://download.docker.com/linux/ubuntu \ Release' does not have a Release file.
     add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu/ $(lsb_release -cs) stable" || true
-    apt-get update
-    apt-get install docker-ce docker-ce-cli containerd.io
+    apt update
+    apt install -y docker-ce docker-ce-cli containerd.io
     which docker
     mkdir -p $HOME/.docker/cli-plugins/
     curl -SL https://github.com/docker/compose/releases/download/v2.3.3/docker-compose-linux-x86_64 -o ~/.docker/cli-plugins/docker-compose
@@ -457,11 +457,17 @@ function boost_devnet() {
     _error "TODO incomplete"
 }
 
+function wait_complete_TODO() {
+    cd $BOOST_SOURCE_PATH/docker/devnet
+    docker compose exec boost /bin/bash
+}
+
 function do_docker() {
+    rebuild
+    build_boost
     docker_boost_setup
     docker_boost_build
     docker_boost_run
-    # docker compose exec boost /bin/bash
 }
 
 # Execute function from parameters
