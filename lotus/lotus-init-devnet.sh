@@ -321,9 +321,11 @@ function full_rebuild_test() {
     restart_daemons && sleep 2
 
     setup_wallets && sleep 5
-    # client_lotus_deal && sleep 5   # should be ok, but lets avoid legacy deals, because boost
-    build_boost
-    config_boost
+    # client_lotus_deal && sleep 5   # Legacy deals.
+
+    # Note: Skip Boost. Problems with Boost on mac/linux/docker.
+    # build_boost
+    # config_boost
 }
 
 function build_boost() {
@@ -468,6 +470,10 @@ function do_docker() {
     docker_boost_setup
     docker_boost_build
     docker_boost_run
+}
+
+function run() {
+    full_rebuild_test
 }
 
 # Execute function from parameters
