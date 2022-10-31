@@ -255,6 +255,7 @@ function _prep_test_data() {
 
 function client_lotus_deal() {
 
+    _echo "📦📦📦 Making Deals..."
     _echo "CLIENT_WALLET_ADDRESS, DATA_CID, CAR_FILE, DATASET_NAME: $CLIENT_WALLET_ADDRESS, $DATA_CID, $CAR_FILE, $DATASET_NAME"
 
     if [[ -z "$CLIENT_WALLET_ADDRESS" || -z "$DATA_CID" || -z "$CAR_FILE" || -z "$DATASET_NAME" ]]; then
@@ -306,7 +307,7 @@ function retrieve_wait() {
     RETRY_COUNT=20
     until retrieve $CID; do
         RETRY_COUNT=$((RETRY_COUNT-1))
-        if [[ "$RETRY_COUNT" < 1 ]]; then _error "Exhausted retrie retries"; fi
+        if [[ "$RETRY_COUNT" < 1 ]]; then _error "Exhausted retries"; fi
         _echo "RETRY_COUNT: $RETRY_COUNT"
         sleep 10
     done
@@ -321,7 +322,12 @@ function full_rebuild_test() {
     restart_daemons && sleep 2
 
     setup_wallets && sleep 5
-    # client_lotus_deal && sleep 5   # Legacy deals.
+    client_lotus_deal && sleep 5   # Legacy deals.
+
+    # Wait 24hrs for deal to seal and appear onchain.
+    _echo "📦 sleeping 24hrs..." && sleep $(( 60*60*24 ))
+
+    _echo "📦 retrieving CID: $DATA_CID" && retrieve_wait "$DATA_CID"
 
     # Note: Skip Boost. Problems with Boost on mac/linux/docker.
     # build_boost
