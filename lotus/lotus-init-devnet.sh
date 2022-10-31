@@ -120,17 +120,19 @@ function restart_daemons() {
     _killall_daemons
     sleep 2
     start_daemons
+    sleep 10
     _echo "daemons restarted."
 }
 
 function start_daemons() {
-    _echo "Starting daemons..."
+    _echo "Starting lotus daemons..."
     cd $LOTUS_SOURCE
     nohup lotus daemon >> /var/log/lotus-daemon.log 2>&1 &
     time _waitLotusStartup
     nohup lotus-miner run --nosync >> /var/log/lotus-miner.log 2>&1 &
-    lotus-miner wait-api --timeout 300s
-    _echo "Daemons started."
+    lotus-miner wait-api --timeout 600s
+    _echo "Lotus Daemons started."
+    start_singularity
 }
 
 function start_boost() {
@@ -142,6 +144,7 @@ function start_singularity() {
     _echo "Starting singularity daemon..."
     nohup singularity daemon 2>&1 >> /var/log/singularity.log &
     sleep 5 && singularity prep list
+    _echo "Singularity started."
 }
 
 function stop_singularity() {
