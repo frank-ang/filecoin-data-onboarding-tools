@@ -255,14 +255,12 @@ function _prep_test_data() {
 
 function client_lotus_deal() {
 
-    _echo "📦📦📦 Making Deals..."
-    _echo "CLIENT_WALLET_ADDRESS, DATA_CID, CAR_FILE, DATASET_NAME: $CLIENT_WALLET_ADDRESS, $DATA_CID, $CAR_FILE, $DATASET_NAME"
-
+    _prep_test_data  # Setup DATA_CID, CAR_FILE, DATASET_NAME
     if [[ -z "$CLIENT_WALLET_ADDRESS" || -z "$DATA_CID" || -z "$CAR_FILE" || -z "$DATASET_NAME" ]]; then
         _error "CLIENT_WALLET_ADDRESS, DATA_CID, CAR_FILE, DATASET_NAME need to be defined."
     fi
+    _echo "📦📦📦 Making Deals..."
     _echo "CLIENT_WALLET_ADDRESS, DATA_CID, CAR_FILE, DATASET_NAME: $CLIENT_WALLET_ADDRESS, $DATA_CID, $CAR_FILE, $DATASET_NAME"
-    _prep_test_data
     _echo "Importing CAR into Lotus..."
     lotus client import --car $CAR_FILE
     sleep 2
@@ -272,7 +270,7 @@ function client_lotus_deal() {
     QUERY_ASK_CMD="lotus client query-ask $MINERID"
     _echo "Executing: $QUERY_ASK_CMD"
     QUERY_ASK_OUT=$($QUERY_ASK_CMD)
-    _echo "ask output: $QUERY_ASK_OUT"
+    _echo "query-ask response: $QUERY_ASK_OUT"
 
     # E.g. Price per GiB: 0.0000000005 FIL, per epoch (30sec) 
     #      FIL/Epoch for 0.000002 GiB (2KB) : 
