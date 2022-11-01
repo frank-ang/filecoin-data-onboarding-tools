@@ -38,12 +38,13 @@ function _error() {
 
 function _waitLotusStartup() {
     t=${1:-"120s"} # note trailing "s"
-    echo "## Waiting for lotus startup, timeout $t..."
+    _echo "## Waiting for lotus startup, timeout $t..."
     lotus wait-api --timeout $t
     # redundant # lotus status || _error "timeout waiting for lotus startup."
 }
 
 function _killall_daemons() {
+    _echo "Killing all daemons..."
     lotus-miner stop || true
     lotus daemon stop || true
     stop_singularity || true
@@ -107,10 +108,12 @@ function init_daemons() {
     _echo "Starting the miner..."
     nohup ./lotus-miner run --nosync >> /var/log/lotus-miner.log 2>&1 &
     lotus-miner wait-api --timeout 900s
+    _echo "Initializing Daemons completed."
 }
 
 
 function deploy_miner_config() {
+    _echo "Deploying miner config..."
     cp -f $LOTUS_MINER_PATH/config.toml $LOTUS_MINER_PATH/config.toml.bak
     cp -f $LOTUS_MINER_CONFIG_FILE $LOTUS_MINER_PATH/config.toml
 }
@@ -150,6 +153,7 @@ function start_singularity() {
 
 function stop_singularity() {
     pkill -f 'node.*singularity'
+    pkill -f '.*mongod-x64-ubuntu'
 }
 
 function docker_boost_setup() {
