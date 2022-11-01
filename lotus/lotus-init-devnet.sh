@@ -300,22 +300,26 @@ function retrieve() { # TODO TEST
         _echo "CID undefined." 1>&2
         exit 1
     fi
+
     # following line throws error: ERR t01000@12D3KooW9sKNwEP2x5rKZojgFstGihzgGxjFNj3ukcWTVHgMh9Sm: exhausted 5 attempts but failed to open stream, err: peer:12D3KooW9sKNwEP2x5rKZojgFstGihzgGxjFNj3ukcWTVHgMh9Sm: resource limit exceeded
     # lotus client find $CID
+
+    _echo "Retrieving CID: $CID"
     rm -rf `pwd`/retrieved-out.gitignore || true
-    rm -f `pwd`/retrieved-car.gitignore || true
     lotus client retrieve --provider t01000 $CID `pwd`/retrieved.car.gitignore
-    lotus client retrieve --provider t01000 --car `pwd`/$CID retrieved-car.out
+
+    # rm -f `pwd`/retrieved-car.gitignore || true
+    # lotus client retrieve --provider t01000 --car `pwd`/$CID retrieved-car.out # ERROR: selected encoding not supported
 }
 
 function retrieve_wait() {
     CID=$1
-    RETRY_COUNT=20
+    RETRY_COUNT=60
     until retrieve $CID; do
         RETRY_COUNT=$((RETRY_COUNT-1))
         if [[ "$RETRY_COUNT" < 1 ]]; then _error "Exhausted retries"; fi
         _echo "RETRY_COUNT: $RETRY_COUNT"
-        sleep 10
+        sleep 60
     done
 }
 
@@ -330,10 +334,14 @@ function full_rebuild_test() {
     setup_wallets && sleep 5
     client_lotus_deal && sleep 5   # Legacy deals.
 
-    # Wait 24hrs for deal to seal and appear onchain.
-    _echo "📦 sleeping 24hrs..." && sleep $(( 60*60*24 ))
+    # Wait some time for deal to seal and appear onchain.
+    SEAL_SLEEP_SECS=$(( 60*10 )) # 10 mins
+    _echo "📦 sleeping $SEAL_SLEEP_SECS secs..." && sleep $SEAL_SLEEP_SECS
 
     _echo "📦 retrieving CID: $DATA_CID" && retrieve_wait "$DATA_CID"
+    # compare source file with retrieved file.
+    _echo "comparing source file with retrieved file."
+    diff -r /tmp/source `pwd`/retrieved.car.gitignore && _echo "comparison succeeded."
 
     # Note: Skip Boost. Problems with Boost on mac/linux/docker.
     # build_boost
@@ -471,10 +479,6 @@ function boost_devnet() {
     _error "TODO incomplete"
 }
 
-function wait_complete_TODO() {
-    cd $BOOST_SOURCE_PATH/docker/devnet
-    docker compose exec boost /bin/bash
-}
 
 function do_docker() {
     rebuild
