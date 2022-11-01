@@ -332,11 +332,24 @@ function full_rebuild_test() {
     restart_daemons && sleep 2
 
     setup_wallets && sleep 5
+
+    _echo "lotus-miner storage-deals and sectors..."
+    lotus-miner storage-deals list -v
+    lotus-miner sectors list
+
     client_lotus_deal && sleep 5   # Legacy deals.
 
+    _echo "lotus-miner storage-deals and sectors..."
+    lotus-miner storage-deals list -v
+    lotus-miner sectors list
+
     # Wait some time for deal to seal and appear onchain.
-    SEAL_SLEEP_SECS=$(( 60*10 )) # 10 mins
+    SEAL_SLEEP_SECS=$(( 60*3 )) # 3 mins
     _echo "📦 sleeping $SEAL_SLEEP_SECS secs..." && sleep $SEAL_SLEEP_SECS
+
+    _echo "lotus-miner storage-deals and sectors..."
+    lotus-miner storage-deals list -v
+    lotus-miner sectors list
 
     _echo "📦 retrieving CID: $DATA_CID" && retrieve_wait "$DATA_CID"
     # compare source file with retrieved file.
