@@ -106,6 +106,7 @@ function init_daemons() {
     time ./lotus-miner init --genesis-miner --actor=t01000 --sector-size=2KiB --pre-sealed-sectors=~/.genesis-sectors --pre-sealed-metadata=~/.genesis-sectors/pre-seal-t01000.json --nosync
     _echo "Starting the miner..."
     nohup ./lotus-miner run --nosync >> /var/log/lotus-miner.log 2>&1 &
+    lotus-miner wait-api --timeout 600s
 }
 
 
@@ -118,7 +119,7 @@ function restart_daemons() {
     _echo "restarting daemons..."
     _echo "halting any existing daemons..."
     _killall_daemons
-    sleep 2
+    sleep 10
     start_daemons
     sleep 10
     _echo "daemons restarted."
