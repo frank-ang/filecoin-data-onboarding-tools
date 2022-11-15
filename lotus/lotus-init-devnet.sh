@@ -176,6 +176,8 @@ function _prep_test_data() {
     export DATASET_PATH=/tmp/source
     export CAR_DIR=/tmp/car
     export DATASET_NAME=`uuidgen | cut -d'-' -f1`
+    echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
+
     rm -rf $CAR_DIR && mkdir -p $CAR_DIR
     rm -rf $DATASET_PATH && mkdir -p $DATASET_PATH
     dd if=/dev/urandom of="$DATASET_PATH/$DATASET_NAME.dat" bs=1024 count=1 iflag=fullblock
@@ -265,6 +267,36 @@ function retrieve_wait() {
         _echo "RETRY_COUNT: $RETRY_COUNT"
         sleep 60
     done
+}
+
+function singularity_test() {
+    _echo "singularity_test starting..."
+    . $TEST_CONFIG_FILE # set wallet addresses env variables.
+    singularity prep list --json | jq -r '.[].name'
+    _echo "DATASET_NAME: $DATASET_NAME"
+    # or, alternately # export DATASET_NAME=`singularity prep list --json | jq -r '.[].name' | grep -v test | head -1`
+    
+    singularity prep status --json $DATASET_NAME
+    # TODO: check whether prep has completed...?
+    #   singularity prep generation-status ??
+    singularity prep list --json | jq -r '.[] | select(.name==env.DATASET_NAME) | [ .id, .name ]'
+    singularity prep list --json | jq -r '.[] | select(.name==env.DATASET_NAME) | ( .id, .name, .scanningStatus, .generationTotal, .generationCompleted )'
+
+    _echo "Make deals to storage providers..."
+    export MINERID="t01000"
+    export FULLNODE_API_INFO="localhost"
+
+    REPL_CMD="singularity repl start -m 10 $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    _echo "Executing replication command: $REPL_CMD"
+    $REPL_CMD
+
+    # singularity repl list
+    # TODO fails at: singularity repl list, Error: connect ECONNREFUSED 127.0.0.1:7004
+
+    # singularity repl status
+
+
+    _echo "singularity_test completed."
 }
 
 function full_rebuild_test() {
