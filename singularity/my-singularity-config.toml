@@ -45,7 +45,7 @@ enabled = true
 bind = "0.0.0.0"
 port = 7003
 # If not using the built-in IPFS daemon, use below URI to connect to IPFS API
-# ipfs_http = "http://localhost:5001"
+ipfs_http = "http://localhost:5001"
 
 [ipfs]
 # Whether to start a built-in IPFS daemon
@@ -71,5 +71,5 @@ port = 7004
 enabled = true
 min_retry_wait_ms = 30000
 max_retry_count = 3
-# boost_cli_cmd = "boost" #if not in PATH, specify full location here
+boost_cli_cmd = "boost" #if not in PATH, specify full location here
 lotus_cli_cmd = "lotus" #if not in PATH, specify full location here

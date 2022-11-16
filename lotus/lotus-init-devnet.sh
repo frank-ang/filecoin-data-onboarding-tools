@@ -40,7 +40,6 @@ function _waitLotusStartup() {
     t=${1:-"120s"} # note trailing "s"
     _echo "## Waiting for lotus startup, timeout $t..."
     lotus wait-api --timeout $t
-    # redundant # lotus status || _error "timeout waiting for lotus startup."
 }
 
 function _killall_daemons() {
@@ -135,7 +134,9 @@ function start_daemons() {
 function start_singularity() {
     _echo "Starting singularity daemon..."
     nohup singularity daemon 2>&1 >> /var/log/singularity.log &
-    sleep 5 && singularity prep list
+    _echo "Awaiting singularity start..."
+    timeout 1m bash -c 'until singularity prep list; do sleep 10; done'
+    timeout 30s bash -c 'until singularity repl list; do sleep 10; done'
     _echo "Singularity started."
 }
 
