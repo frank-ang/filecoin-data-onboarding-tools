@@ -287,16 +287,14 @@ function singularity_test() {
     export MINERID="t01000"
     export FULLNODE_API_INFO="localhost"
 
-    REPL_CMD="singularity repl start -m 10 $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    # Usage: singularity replication start [options] <datasetid> <storage-providers> <client> [# of replica]
+    REPL_CMD="singularity repl start --max-deals 10 --verified false --output-csv ./singularity-repl-out.csv $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
     _echo "Executing replication command: $REPL_CMD"
     $REPL_CMD
 
-    # singularity repl list
-    # TODO fails at: singularity repl list, Error: connect ECONNREFUSED 127.0.0.1:7004
-
+    _echo "listing singularity replications..."
+    singularity repl list # ?? TODO fails at: singularity repl list, Error: connect ECONNREFUSED 127.0.0.1:7004
     # singularity repl status
-
-
     _echo "singularity_test completed."
 }
 
