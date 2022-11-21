@@ -11,7 +11,7 @@ import config from '../common/Config';
 import { AbortSignal } from '../common/AbortSignal';
 import { exec } from 'promisify-child-process';
 import { sleep } from '../common/Util';
-import { HeightFromCurrentTime } from '../common/ChainHeight';
+//import { HeightFromCurrentTime } from '../common/ChainHeight';
 import GenerateCsv from '../common/GenerateCsv';
 import MetricEmitter from '../common/metrics/MetricEmitter';
 
