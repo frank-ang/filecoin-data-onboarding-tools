@@ -20,6 +20,8 @@ LOTUS_MINER_CONFIG_FILE=`pwd`"/lotusminer-autopublish-config.toml"
 LOTUS_SOURCE=$HOME/lotus/
 LOTUS_DAEMON_LOG=${LOTUS_SOURCE}lotus-daemon.log
 LOTUS_MINER_LOG=${LOTUS_SOURCE}lotus-miner.log
+SINGULARITY_OUT_CSV=`pwd`"/singularity-out.csv"
+
 
 if [[ -z "$HOME" ]]; then
     echo "HOME undefined." 1>&2
@@ -247,16 +249,9 @@ function retrieve() { # TODO TEST
         _echo "CID undefined." 1>&2
         exit 1
     fi
-
-    # following line throws error: ERR t01000@12D3KooW9sKNwEP2x5rKZojgFstGihzgGxjFNj3ukcWTVHgMh9Sm: exhausted 5 attempts but failed to open stream, err: peer:12D3KooW9sKNwEP2x5rKZojgFstGihzgGxjFNj3ukcWTVHgMh9Sm: resource limit exceeded
-    # lotus client find $CID
-
     _echo "Retrieving CID: $CID"
     rm -rf `pwd`/retrieved-out.gitignore || true
     lotus client retrieve --provider t01000 $CID `pwd`/retrieved.car.gitignore
-
-    # rm -f `pwd`/retrieved-car.gitignore || true
-    # lotus client retrieve --provider t01000 --car `pwd`/$CID retrieved-car.out # ERROR: selected encoding not supported
 }
 
 function retrieve_wait() {
@@ -278,24 +273,50 @@ function singularity_test() {
     # or, alternately # export DATASET_NAME=`singularity prep list --json | jq -r '.[].name' | grep -v test | head -1`
     
     singularity prep status --json $DATASET_NAME
-    # TODO: check whether prep has completed...?
+    # Wait for prep generation status to complete. TODO.
     #   singularity prep generation-status ??
     singularity prep list --json | jq -r '.[] | select(.name==env.DATASET_NAME) | [ .id, .name ]'
     singularity prep list --json | jq -r '.[] | select(.name==env.DATASET_NAME) | ( .id, .name, .scanningStatus, .generationTotal, .generationCompleted )'
 
     _echo "Make deals to storage providers..."
     export MINERID="t01000"
-    export FULLNODE_API_INFO="localhost"
+    # export FULLNODE_API_INFO="localhost"
+    CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
+    START_DELAY_DAYS=$(( $CURRENT_EPOCH / 2880 + 1 )) # 1 day floor.
+    DURATION_DAYS=180
+    echo "CURRENT_EPOCH: $CURRENT_EPOCH , START_DELAY_DAYS: $START_DELAY_DAYS , DURATION_DAYS: $DURATION_DAYS"
 
     # Usage: singularity replication start [options] <datasetid> <storage-providers> <client> [# of replica]
-    REPL_CMD="singularity repl start --max-deals 10 --verified false --output-csv ./singularity-repl-out.csv $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
     _echo "Executing replication command: $REPL_CMD"
     $REPL_CMD
-
     _echo "listing singularity replications..."
-    singularity repl list # ?? TODO fails at: singularity repl list, Error: connect ECONNREFUSED 127.0.0.1:7004
-    # singularity repl status
+    singularity repl list
+    # singularity repl status -v REPLACE_WITH_REPL_ID
+    lotus-miner storage-deals list -v
+    lotus-miner sectors list
+
     _echo "singularity_test completed."
+}
+
+function singularity_verify_test() {
+    _echo "singularity_verify_test starting..."
+    . $TEST_CONFIG_FILE # set wallet addresses env variables.
+    export MINERID="t01000"
+    # export FULLNODE_API_INFO="localhost"
+    unset FULLNODE_API_INFO
+    CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
+    START_DELAY_DAYS=$(( $CURRENT_EPOCH / 2880 + 1 )) # 1 day floor.
+    echo "CURRENT_EPOCH: $CURRENT_EPOCH , START_DELAY_DAYS: $START_DELAY_DAYS"
+    DURATION_DAYS=180
+    REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    _echo "Executing replication command: $REPL_CMD" 
+    $REPL_CMD
+    singularity repl list
+    # TODO investigate repl status # deal rejected: invalid deal end epoch 3882897: cannot be more than 1555200 past current epoch 1007
+    # singularity repl status -v 63771015987d840fafb37afa # TODO hardcoded REPLACE_WITH_REPL_ID
+    lotus-miner storage-deals list -v
+    lotus-miner sectors list
 }
 
 function full_rebuild_test() {
@@ -320,7 +341,7 @@ function full_rebuild_test() {
 
     # Wait some time for deal to seal and appear onchain.
     SEAL_SLEEP_SECS=$(( 60*3 )) # 3 mins
-    _echo "📦 sleeping $SEAL_SLEEP_SECS secs..." && sleep $SEAL_SLEEP_SECS
+    _echo "📦 sleeping $SEAL_SLEEP_SECS secs for sealing..." && sleep $SEAL_SLEEP_SECS
 
     _echo "lotus-miner storage-deals and sectors..."
     lotus-miner storage-deals list -v

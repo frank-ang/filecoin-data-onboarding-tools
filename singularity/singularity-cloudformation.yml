@@ -195,6 +195,9 @@ Resources:
           # Repo
           cd /root
           git clone https://github.com/tech-greedy/singularity.git
+          git clone https://github.com/frank-ang/singularity-integ-test.git
+          cp singularity-integ-test/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
+
           cd singularity
           npm ci
           npm run build
