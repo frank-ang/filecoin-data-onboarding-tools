@@ -11,7 +11,7 @@ import config from '../common/Config';
 import { AbortSignal } from '../common/AbortSignal';
 import { exec } from 'promisify-child-process';
 import { sleep } from '../common/Util';
-//import { HeightFromCurrentTime } from '../common/ChainHeight';
+import { HeightFromCurrentTime } from '../common/ChainHeight';
 import GenerateCsv from '../common/GenerateCsv';
 import MetricEmitter from '../common/metrics/MetricEmitter';
 
@@ -415,7 +415,8 @@ export default class DealReplicationWorker extends BaseService {
           }
 
           const startDelay = replicationRequest.startDelay ? replicationRequest.startDelay : 20160;
-          // const currentHeight = HeightFromCurrentTime(); // frank-ang: TODO hacky fix: get actual block height from devnet. 
+          const currentHeight_orig = HeightFromCurrentTime();
+          // frank-ang: TODO hacky fix for devnet: get actual block height from lotus.
           const currentHeight = `${this.lotusCMD} status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p'`;
           this.logger.warn(`#### Current height: ${currentHeight}`)
 

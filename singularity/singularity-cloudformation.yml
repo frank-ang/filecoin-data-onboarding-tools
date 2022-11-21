@@ -203,21 +203,11 @@ Resources:
           npm link
           npx singularity -h
 
-          # Install Singularity # TODO ERR 127 ? 
-          #npm i -g @techgreedy/singularity
-          #which singularity-prepare
-          #singularity-prepare -h
-
           # Install Generate CAR dependency
           cd $HOME
           git clone https://github.com/tech-greedy/go-generate-car.git
           cd go-generate-car
           make
-
-          # Then copy the generated binary to override the existing one from the PATH for your node environment, i.e.
-          # singularity installed globally /home/user/.nvm/versions/node/v16.xx.x/lib/node_modules/.bin
-          # ls: cannot access '/root/.nvm/versions/node/v16.15.1/lib/node_modules/.bin': No such file or directory
-          # mv ./generate-car /root/singularity/node_modules/.bin
 
           # singularity cloned locally ./node_modules/.bin
           mv ./generate-car /root/singularity/node_modules/.bin
@@ -226,7 +216,7 @@ Resources:
 
           # Singularity init, run daemon, prep etc. Run a test script
           cd $HOME
-          # git clone https://github.com/frank-ang/singularity-integ-test.git # TODO hack for updating DealReapliationWorker.ts
+          # git clone https://github.com/frank-ang/singularity-integ-test.git
           cd singularity-integ-test
           # git fetch
           # git switch test
