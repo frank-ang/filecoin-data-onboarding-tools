@@ -196,7 +196,7 @@ Resources:
           cd /root
           git clone https://github.com/tech-greedy/singularity.git
           git clone https://github.com/frank-ang/singularity-integ-test.git
-          cp singularity-integ-test/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
+          cp -f singularity-integ-test/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
 
           cd singularity
           npm ci
@@ -227,7 +227,7 @@ Resources:
 
           # Singularity init, run daemon, prep etc. Run a test script
           cd $HOME
-          git clone https://github.com/frank-ang/singularity-integ-test.git
+          # git clone https://github.com/frank-ang/singularity-integ-test.git # TODO hack for updating DealReapliationWorker.ts
           cd singularity-integ-test
           git fetch
           git switch test
