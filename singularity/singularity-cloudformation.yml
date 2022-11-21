@@ -129,7 +129,7 @@ Resources:
           echo "## Installing Dependencies..."
           cd /root
           apt update
-          apt install -y git openssl rsync make jq unzip nfs-common
+          apt install -y git openssl gcc rsync make jq unzip nfs-common
           apt install -y software-properties-common
           apt install -y sysstat iotop
 

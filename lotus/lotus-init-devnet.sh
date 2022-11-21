@@ -354,7 +354,7 @@ function full_rebuild_test() {
     _echo "comparing source file with retrieved file."
     diff -r /tmp/source `pwd`/retrieved.car.gitignore && _echo "comparison succeeded."
 
-    singularity_test
+    # singularity_test
 }
 
 # Entry point.

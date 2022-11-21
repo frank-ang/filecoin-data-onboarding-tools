@@ -417,8 +417,8 @@ export default class DealReplicationWorker extends BaseService {
           const startDelay = replicationRequest.startDelay ? replicationRequest.startDelay : 20160;
           const currentHeight_orig = HeightFromCurrentTime();
           // frank-ang: TODO hacky fix for devnet: get actual block height from lotus.
-          const currentHeight = `${this.lotusCMD} status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p'`;
-          this.logger.warn(`#### Current height: ${currentHeight}`)
+          const currentHeight = parseInt(`${this.lotusCMD} status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p'`);
+          this.logger.warn(`#### Current heights, devnet: ${currentHeight}, mainnet: ${currentHeight_orig}`)
 
           const startEpoch = startDelay + currentHeight + 60; // 30 min buffer time
           this.logger.debug(`Calculated start epoch startDelay: ${startDelay} + currentHeight: ${currentHeight} + 60 = ${startEpoch}`);
