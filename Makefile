@@ -60,4 +60,4 @@ connect_boost:
 
 tunnel_to_appliance:
 	@echo "Starting local TCP tunnel to: ${AWS_APPLIANCE_IP}"
-	sudo ssh -L 8080:127.0.0.1:8080 ubuntu@${AWS_APPLIANCE_IP}
+	ssh -L 8080:127.0.0.1:8080 ubuntu@${AWS_APPLIANCE_IP}
