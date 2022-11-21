@@ -290,12 +290,14 @@ function singularity_test() {
     REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
     _echo "Executing replication command: $REPL_CMD"
     $REPL_CMD
+
+    _echo "sleeping a bit..." && sleep 5
     _echo "listing singularity replications..."
     singularity repl list
     # singularity repl status -v REPLACE_WITH_REPL_ID
+
     lotus-miner storage-deals list -v
     lotus-miner sectors list
-
     _echo "singularity_test completed."
 }
 
@@ -351,6 +353,8 @@ function full_rebuild_test() {
     # compare source file with retrieved file.
     _echo "comparing source file with retrieved file."
     diff -r /tmp/source `pwd`/retrieved.car.gitignore && _echo "comparison succeeded."
+
+    singularity_test
 }
 
 # Entry point.
