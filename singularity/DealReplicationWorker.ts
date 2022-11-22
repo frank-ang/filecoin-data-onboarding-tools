@@ -602,15 +602,26 @@ export default class DealReplicationWorker extends BaseService {
   }
 
   private async lotusBlockHeight (): Promise<number> {
+    let blockHeight = 0;
     const statusCommand = `${this.lotusCMD} status`
     const cmdOut = await exec(statusCommand);
-    var outString = cmdOut?.stdout?.toString();
-    this.logger.debug(`## lotusBlockHeight command stdout: ${outString}`)
-    const re = new RegExp('/Sync Epoch: ([0-9]+)[^0-9]*/');
-    // note, working cli pipe: | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p'
-    var matches = outString?.match(re)
-    var matchString = matches[1]
-    this.logger.debug(`## lotusBlockHeight matchString: ${matchString}`)
-    return parseInt(matchString);
+    if (cmdOut.stdout != undefined) { // TS2532: Object is possibly 'undefined'.
+      var outString = cmdOut.stdout.toString().trim();
+      this.logger.info(`## lotusBlockHeight command stdout: ${outString}`);
+      const re = new RegExp('/Sync Epoch: ([0-9]+)[^0-9]*/');
+      // note, working cli pipe: | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p'
+      // var matches = outString.match(re)[1]
+      var matchString = outString.match(re)?.[1] // matches[1]
+      this.logger.info(`## lotusBlockHeight matchString: ${matchString}`);
+      if (typeof matchString === 'string') {
+        blockHeight = parseInt(matchString); // TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'
+      } else {
+        blockHeight = -1;
+      }
+    } else {
+      throw new Error(JSON.stringify(cmdOut));
+    }
+    return blockHeight;
   }
+
 }
