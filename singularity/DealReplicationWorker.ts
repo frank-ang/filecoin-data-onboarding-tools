@@ -417,8 +417,9 @@ export default class DealReplicationWorker extends BaseService {
           const startDelay = replicationRequest.startDelay ? replicationRequest.startDelay : 20160;
           const currentHeight_orig = HeightFromCurrentTime();
           // frank-ang: TODO hacky fix for devnet: get actual block height from lotus.
-          const currentHeight = parseInt(`${this.lotusCMD} status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p'`);
-          this.logger.warn(`#### Current heights, devnet: ${currentHeight}, mainnet: ${currentHeight_orig}`)
+          this.logger.warn("#### TODO HACK: calling lotusBlockHeight... ");
+          const currentHeight = await this.lotusBlockHeight();
+          this.logger.warn(`#### TODO HACK: Current heights, devnet: ${currentHeight}, mainnet: ${currentHeight_orig}`)
 
           const startEpoch = startDelay + currentHeight + 60; // 30 min buffer time
           this.logger.debug(`Calculated start epoch startDelay: ${startDelay} + currentHeight: ${currentHeight} + 60 = ${startEpoch}`);
@@ -598,5 +599,18 @@ export default class DealReplicationWorker extends BaseService {
         upsert: true
       }
     );
+  }
+
+  private async lotusBlockHeight (): Promise<number> {
+    const statusCommand = `${this.lotusCMD} status`
+    const cmdOut = await exec(statusCommand);
+    var outString = cmdOut?.stdout?.toString();
+    this.logger.debug(`## lotusBlockHeight command stdout: ${outString}`)
+    const re = new RegExp('/Sync Epoch: ([0-9]+)[^0-9]*/');
+    // note, working cli pipe: | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p'
+    var matches = outString?.match(re)
+    var matchString = matches[1]
+    this.logger.debug(`## lotusBlockHeight matchString: ${matchString}`)
+    return parseInt(matchString);
   }
 }
