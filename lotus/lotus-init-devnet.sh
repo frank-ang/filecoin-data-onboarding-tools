@@ -287,7 +287,8 @@ function singularity_test() {
     echo "CURRENT_EPOCH: $CURRENT_EPOCH , START_DELAY_DAYS: $START_DELAY_DAYS , DURATION_DAYS: $DURATION_DAYS"
 
     # Usage: singularity replication start [options] <datasetid> <storage-providers> <client> [# of replica]
-    REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    PRICE="953" #"0.0000000005"
+    REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
     _echo "Executing replication command: $REPL_CMD"
     $REPL_CMD
 
@@ -315,7 +316,8 @@ function singularity_verify_test() {
     _echo "Executing replication command: $REPL_CMD" 
     $REPL_CMD
     singularity repl list
-    # TODO investigate repl status # deal rejected: invalid deal end epoch 3882897: cannot be more than 1555200 past current epoch 1007
+    # Singularity bug. Does not support devnet block height. (workaround in DealReplicationWorker.ts)
+    # error during repl status # deal rejected: invalid deal end epoch 3882897: cannot be more than 1555200 past current epoch 1007
     # singularity repl status -v 63771015987d840fafb37afa # TODO hardcoded REPLACE_WITH_REPL_ID
     lotus-miner storage-deals list -v
     lotus-miner sectors list
