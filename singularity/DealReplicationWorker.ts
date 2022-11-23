@@ -153,7 +153,7 @@ export default class DealReplicationWorker extends BaseService {
     } else {
       unit = math.unit(0, 'm');
     }
-    return math.format(unit.toNumber(), { notation: 'fixed' });
+    return math.format(unit.toNumber().toFixed(18), { notation: 'fixed' });
   }
 
   private static assembleDownloadUrl (urlPrefix: string, pieceCid?: string, filenameOverride?: string) {

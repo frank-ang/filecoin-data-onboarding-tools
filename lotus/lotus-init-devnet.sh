@@ -229,8 +229,7 @@ function client_lotus_deal() {
     QUERY_ASK_OUT=$($QUERY_ASK_CMD)
     _echo "query-ask response: $QUERY_ASK_OUT"
 
-    # E.g. Price per GiB: 0.0000000005 FIL, per epoch (30sec) 
-    #      FIL/Epoch for 0.000002 GiB (2KB) : 
+    # E.g. Price per GiB per 30sec epoch: 0.0000000005 FIL
     PRICE=0.000000000000001
     DURATION=518400 # 180 days
 
