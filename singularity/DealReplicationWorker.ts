@@ -611,7 +611,7 @@ export default class DealReplicationWorker extends BaseService {
       const re = new RegExp(/Sync Epoch: ([0-9]+)[^0-9]+.*/);
       // note, working cli pipe: | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p'
       // var matches = outString.match(re)[1]
-      var matchString = outString.match(re)[1]
+      var matchString = outString.match(re)?.[1] // TS2531: Object is possibly 'null'
       this.logger.info(`## lotusBlockHeight matchString: ${matchString}`);
       if (typeof matchString === 'string') {
         blockHeight = parseInt(matchString); // TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'
