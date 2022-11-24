@@ -608,15 +608,15 @@ export default class DealReplicationWorker extends BaseService {
     if (cmdOut.stdout != undefined) { // TS2532: Object is possibly 'undefined'.
       var outString = cmdOut.stdout.toString().trim();
       this.logger.info(`## lotusBlockHeight command stdout: ${outString}`);
-      const re = new RegExp('/Sync Epoch: ([0-9]+)[^0-9]*/');
+      const re = new RegExp(/Sync Epoch: ([0-9]+)[^0-9]+.*/);
       // note, working cli pipe: | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p'
       // var matches = outString.match(re)[1]
-      var matchString = outString.match(re)?.[1] // matches[1]
+      var matchString = outString.match(re)[1]
       this.logger.info(`## lotusBlockHeight matchString: ${matchString}`);
       if (typeof matchString === 'string') {
         blockHeight = parseInt(matchString); // TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'
       } else {
-        blockHeight = -1;
+        throw new Error(`Error while parsing block height: ${matchString}`);
       }
     } else {
       throw new Error(JSON.stringify(cmdOut));
