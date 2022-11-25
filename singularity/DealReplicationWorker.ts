@@ -421,7 +421,7 @@ export default class DealReplicationWorker extends BaseService {
           const currentHeight = await this.lotusBlockHeight();
           this.logger.warn(`#### TODO HACK: Current heights, devnet: ${currentHeight}, mainnet: ${currentHeight_orig}`)
 
-          const startEpoch = (startDelay + currentHeight + 60).toFixed(0); // 30 min buffer time
+          const startEpoch = parseInt(startDelay + currentHeight + 60); // 30 min buffer time.
           this.logger.debug(`Calculated start epoch startDelay: ${startDelay} + currentHeight: ${currentHeight} + 60 = ${startEpoch}`);
           let dealCmd = '';
           try {
