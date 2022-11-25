@@ -281,7 +281,7 @@ function singularity_test() {
     export MINERID="t01000"
     # export FULLNODE_API_INFO="localhost"
     CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
-    START_DELAY_DAYS=0 # $(( $CURRENT_EPOCH / 2880 + 1 )) # 1 day floor.
+    START_DELAY_DAYS="0.041" # ~ <60 mins.
     DURATION_DAYS=180
     echo "CURRENT_EPOCH: $CURRENT_EPOCH , START_DELAY_DAYS: $START_DELAY_DAYS , DURATION_DAYS: $DURATION_DAYS"
 

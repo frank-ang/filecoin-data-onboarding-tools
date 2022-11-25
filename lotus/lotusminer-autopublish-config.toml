@@ -171,13 +171,13 @@
   #
   # type: Duration
   # env var: LOTUS_DEALMAKING_EXPECTEDSEALDURATION
-  #ExpectedSealDuration = "24h0m0s"
+  ExpectedSealDuration = "1h0m0s"
 
   # Maximum amount of time proposed deal StartEpoch can be in future
   #
   # type: Duration
   # env var: LOTUS_DEALMAKING_MAXDEALSTARTDELAY
-  #MaxDealStartDelay = "336h0m0s"
+  MaxDealStartDelay = "24h0m0s"
 
   # When a deal is ready to publish, the amount of time to wait for more
   # deals to be ready to publish before publishing them all as a batch
