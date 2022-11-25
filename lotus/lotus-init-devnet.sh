@@ -231,9 +231,12 @@ function client_lotus_deal() {
 
     # E.g. Price per GiB per 30sec epoch: 0.0000000005 FIL
     PRICE=0.000000000000001
-    DURATION=518400 # 180 days
+    SEALING_DELAY_EPOCHS=120 # 1 hour
+    DURATION_EPOCHS=$(( 180 * 2880 - $SEALING_DELAY_EPOCHS )) # 180 days
+    CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
+    START_EPOCH=$(( $CURRENT_EPOCH + $SEALING_DELAY_EPOCHS ))
 
-    DEAL_CMD="lotus client deal --from $CLIENT_WALLET_ADDRESS $DATA_CID $MINERID $PRICE $DURATION"
+    DEAL_CMD="lotus client deal --start-epoch $START_EPOCH --from $CLIENT_WALLET_ADDRESS $DATA_CID $MINERID $PRICE $DURATION_EPOCHS"
     _echo "Client Dealing... executing: $DEAL_CMD"
     DEAL_ID=`$DEAL_CMD`
     _echo "DEAL_ID: $DEAL_ID"
@@ -291,7 +294,7 @@ function singularity_test() {
     _echo "Executing replication command: $REPL_CMD"
     $REPL_CMD
 
-    _echo "sleeping a bit..." && sleep 5
+    _echo "sleeping a bit..." && sleep 30
     _echo "listing singularity replications..."
     singularity repl list
     # singularity repl status -v REPLACE_WITH_REPL_ID
