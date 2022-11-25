@@ -193,10 +193,11 @@ Resources:
           cd /root
           git clone https://github.com/tech-greedy/singularity.git
           git clone https://github.com/frank-ang/singularity-integ-test.git
+
+          echo "## building singularity..."
           cd singularity-integ-test && git fetch && git switch test
           cd $HOME
           cp -f singularity-integ-test/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
-
           cd singularity
           npm ci
           npm run build
@@ -224,6 +225,7 @@ Resources:
           nohup ./singularity-tests.sh >> ../singularity-tests.log 2>&1 &
 
           # Lotus build, init, start daemon, verify.
+          echo "## building lotus..."
           cd $HOME/singularity-integ-test/lotus
           nohup ./lotus-init-devnet.sh run >> ../lotus-init-devnet.log 2>&1 &
 
