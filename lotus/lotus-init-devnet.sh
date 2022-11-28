@@ -234,10 +234,11 @@ function client_lotus_deal() {
     CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
     SEALING_DELAY_EPOCHS=$(( 60 * 2 )) # seconds
     START_EPOCH=$(( $CURRENT_EPOCH + $SEALING_DELAY_EPOCHS ))
-    DURATION_EPOCHS=$(( 180 * 2880 - $SEALING_DELAY_EPOCHS )) # 180 days
-    _echo "CURRENT_EPOCH:$CURRENT_EPOCH; START_EPOCH:$START_EPOCH; SEALING_DELAY_EPOCHS:$SEALING_DELAY_EPOCHS; DURATION_EPOCHS:$DURATION_EPOCHS"
-
-    DEAL_CMD="lotus client deal --start-epoch $START_EPOCH --from $CLIENT_WALLET_ADDRESS $DATA_CID $MINERID $PRICE $DURATION_EPOCHS"
+    DURATION_EPOCHS=$(( 180 * 2880 )) # 180 days
+    _echo "CURRENT_EPOCH:$CURRENT_EPOCH; START_EPOCH (ignored TODO):$START_EPOCH; SEALING_DELAY_EPOCHS:$SEALING_DELAY_EPOCHS; DURATION_EPOCHS:$DURATION_EPOCHS"
+    # TODO: tune miner config.
+    #  StorageDealError when using switch: --start-epoch $START_EPOCH , possibly caused by autosealing miner config.
+    DEAL_CMD="lotus client deal --from $CLIENT_WALLET_ADDRESS $DATA_CID $MINERID $PRICE $DURATION_EPOCHS"
     _echo "Client Dealing... executing: $DEAL_CMD"
     DEAL_ID=`$DEAL_CMD`
     _echo "DEAL_ID: $DEAL_ID"
@@ -291,7 +292,10 @@ function singularity_test() {
 
     # Usage: singularity replication start [options] <datasetid> <storage-providers> <client> [# of replica]
     PRICE="953" #"0.0000000005"
-    REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    # TODO troubleshoot online deals first, 
+    # REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    ## troubleshooting. remove --start-delay
+    REPL_CMD="singularity repl start --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
     _echo "Executing replication command: $REPL_CMD"
     $REPL_CMD
 
