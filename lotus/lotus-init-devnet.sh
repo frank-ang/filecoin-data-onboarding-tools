@@ -231,11 +231,11 @@ function client_lotus_deal() {
 
     # E.g. Price per GiB per 30sec epoch: 0.0000000005 FIL
     PRICE=0.000000000000001
-    DURATION_EPOCHS=$(( 180 * 2880 )) # 180 days
     CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
-    SEALING_DELAY_EPOCHS=1
+    SEALING_DELAY_EPOCHS=$(( 60 * 2 )) # seconds
     START_EPOCH=$(( $CURRENT_EPOCH + $SEALING_DELAY_EPOCHS ))
-    _echo "CURRENT_EPOCH:$CURRENT_EPOCH; START_EPOCH:$START_EPOCH"
+    DURATION_EPOCHS=$(( 180 * 2880 - $SEALING_DELAY_EPOCHS )) # 180 days
+    _echo "CURRENT_EPOCH:$CURRENT_EPOCH; START_EPOCH:$START_EPOCH; SEALING_DELAY_EPOCHS:$SEALING_DELAY_EPOCHS; DURATION_EPOCHS:$DURATION_EPOCHS"
 
     DEAL_CMD="lotus client deal --start-epoch $START_EPOCH --from $CLIENT_WALLET_ADDRESS $DATA_CID $MINERID $PRICE $DURATION_EPOCHS"
     _echo "Client Dealing... executing: $DEAL_CMD"
@@ -347,7 +347,7 @@ function full_rebuild_test() {
     lotus-miner sectors list
 
     # Wait some time for deal to seal and appear onchain.
-    SEAL_SLEEP_SECS=$(( 60*3 )) # 3 mins
+    SEAL_SLEEP_SECS=$(( 60*2 )) # 2 mins
     _echo "📦 sleeping $SEAL_SLEEP_SECS secs for sealing..." && sleep $SEAL_SLEEP_SECS
 
     _echo "lotus-miner storage-deals and sectors..."
