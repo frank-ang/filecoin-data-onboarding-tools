@@ -231,10 +231,11 @@ function client_lotus_deal() {
 
     # E.g. Price per GiB per 30sec epoch: 0.0000000005 FIL
     PRICE=0.000000000000001
-    SEALING_DELAY_EPOCHS=120 # 1 hour
-    DURATION_EPOCHS=$(( 180 * 2880 - $SEALING_DELAY_EPOCHS )) # 180 days
+    DURATION_EPOCHS=$(( 180 * 2880 )) # 180 days
     CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
+    SEALING_DELAY_EPOCHS=1
     START_EPOCH=$(( $CURRENT_EPOCH + $SEALING_DELAY_EPOCHS ))
+    _echo "CURRENT_EPOCH:$CURRENT_EPOCH; START_EPOCH:$START_EPOCH"
 
     DEAL_CMD="lotus client deal --start-epoch $START_EPOCH --from $CLIENT_WALLET_ADDRESS $DATA_CID $MINERID $PRICE $DURATION_EPOCHS"
     _echo "Client Dealing... executing: $DEAL_CMD"
@@ -245,7 +246,7 @@ function client_lotus_deal() {
     lotus client get-deal $DEAL_ID
 }
 
-function retrieve() { # TODO TEST
+function retrieve() {
     CID=$1
     if [[ -z "$CID" ]]; then
         _echo "CID undefined." 1>&2
@@ -275,8 +276,8 @@ function singularity_test() {
     # or, alternately # export DATASET_NAME=`singularity prep list --json | jq -r '.[].name' | grep -v test | head -1`
     
     singularity prep status --json $DATASET_NAME
-    # Wait for prep generation status to complete. TODO.
-    #   singularity prep generation-status ??
+    # Wait for prep generation status to complete.
+    # TODO: singularity prep generation-status ?
     singularity prep list --json | jq -r '.[] | select(.name==env.DATASET_NAME) | [ .id, .name ]'
     singularity prep list --json | jq -r '.[] | select(.name==env.DATASET_NAME) | ( .id, .name, .scanningStatus, .generationTotal, .generationCompleted )'
 
