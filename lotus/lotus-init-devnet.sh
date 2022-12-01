@@ -175,24 +175,19 @@ function setup_wallets() {
 
 function _prep_test_data() {
     # Generate test data
-    _echo "Preparing test data..."
+    _echo "Generating test data..."
     export DATASET_PATH=/tmp/source
     export CAR_DIR=/tmp/car
     export DATASET_NAME=`uuidgen | cut -d'-' -f1`
-    echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
+    _echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
 
     rm -rf $CAR_DIR && mkdir -p $CAR_DIR
     rm -rf $DATASET_PATH && mkdir -p $DATASET_PATH
     dd if=/dev/urandom of="$DATASET_PATH/$DATASET_NAME.dat" bs=1024 count=1 iflag=fullblock
-
-    # Run data prep test
-    echo "Running test..."
     export SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_PATH $CAR_DIR"
-    echo "executing command: $SINGULARITY_CMD"
+    _echo "Preparing data via command: $SINGULARITY_CMD"
     $SINGULARITY_CMD
-
-    # Await prep completion
-    echo "awaiting prep status completion."
+    _echo "Awaiting prep completion."
     sleep 5
     PREP_STATUS="blank"
     MAX_SLEEP_SECS=10
@@ -201,13 +196,12 @@ function _prep_test_data() {
         if [ $MAX_SLEEP_SECS -eq 0 ]; then _error "Timeout waiting for prep success status."; fi
         sleep 1
         PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
-        echo "PREP_STATUS: $PREP_STATUS"
+        _echo "PREP_STATUS: $PREP_STATUS"
     done
 
     export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
     export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
     export CAR_FILE=`ls -tr $CAR_DIR/*.car | tail -1`
-
 }
 
 function client_lotus_deal() {
@@ -284,7 +278,6 @@ function singularity_test() {
 
     _echo "Make deals to storage providers..."
     export MINERID="t01000"
-    # export FULLNODE_API_INFO="localhost"
     CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
     START_DELAY_DAYS="0.041" # ~ <60 mins.
     DURATION_DAYS=180
@@ -309,11 +302,45 @@ function singularity_test() {
     _echo "singularity_test completed."
 }
 
-function singularity_verify_test() {
-    _echo "singularity_verify_test starting..."
+function test_singularity() {
+    _echo "test_singularity starting..."
+    test_singularity_prep
     . $TEST_CONFIG_FILE # set wallet addresses env variables.
+    test_singularity_repl
+    _echo "test_singularity verifying..."
+    singularity repl list
+    # Singularity bug. Does not support devnet block height. (workaround in DealReplicationWorker.ts)
+    # error during repl status # deal rejected: invalid deal end epoch 3882897: cannot be more than 1555200 past current epoch 1007
+    # singularity repl status -v 63771015987d840fafb37afa # TODO hardcoded REPLACE_WITH_REPL_ID
+    lotus-miner storage-deals list -v
+    lotus-miner sectors list
+}
+
+function test_singularity_prep() { # TODO rewrite
+    # Generate test data
+    _echo "Generating test data..."
+    export DATASET_PATH=/tmp/source
+    export CAR_DIR=/tmp/car
+    export DATASET_NAME=`uuidgen | cut -d'-' -f1`
+    # TODO lets not save in config file?
+    echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
+    rm -rf $CAR_DIR && mkdir -p $CAR_DIR # TODO preserve if exists?
+    rm -rf $DATASET_PATH && mkdir -p $DATASET_PATH # TODO preserve if exists?
+    dd if=/dev/urandom of="$DATASET_PATH/$DATASET_NAME.dat" bs=1024 count=1 iflag=fullblock
+    export SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_PATH $CAR_DIR"
+    _echo "Preparing test data via command: $SINGULARITY_CMD"
+    $SINGULARITY_CMD
+    _echo "Awaiting prep completion."
+    PREP_STATUS=$(timeout 60s singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status')
+    _echo "PREP_STATUS: $PREP_STATUS"
+    export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
+    export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
+    export CAR_FILE=`ls -tr $CAR_DIR/*.car | tail -1`
+}
+
+function test_singularity_repl() {
+    _echo
     export MINERID="t01000"
-    # export FULLNODE_API_INFO="localhost"
     unset FULLNODE_API_INFO
     CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
     START_DELAY_DAYS=$(( $CURRENT_EPOCH / 2880 + 1 )) # 1 day floor.
@@ -322,12 +349,6 @@ function singularity_verify_test() {
     REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
     _echo "Executing replication command: $REPL_CMD" 
     $REPL_CMD
-    singularity repl list
-    # Singularity bug. Does not support devnet block height. (workaround in DealReplicationWorker.ts)
-    # error during repl status # deal rejected: invalid deal end epoch 3882897: cannot be more than 1555200 past current epoch 1007
-    # singularity repl status -v 63771015987d840fafb37afa # TODO hardcoded REPLACE_WITH_REPL_ID
-    lotus-miner storage-deals list -v
-    lotus-miner sectors list
 }
 
 function full_rebuild_test() {
@@ -364,6 +385,7 @@ function full_rebuild_test() {
     diff -r /tmp/source `pwd`/retrieved.car.gitignore && _echo "comparison succeeded."
 
     # singularity_test
+    test_singularity
 }
 
 # Entry point.
