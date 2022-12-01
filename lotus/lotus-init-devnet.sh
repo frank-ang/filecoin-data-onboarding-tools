@@ -179,7 +179,7 @@ function _prep_test_data() {
     export DATASET_PATH=/tmp/source
     export CAR_DIR=/tmp/car
     export DATASET_NAME=`uuidgen | cut -d'-' -f1`
-    _echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
+    echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
 
     rm -rf $CAR_DIR && mkdir -p $CAR_DIR
     rm -rf $DATASET_PATH && mkdir -p $DATASET_PATH
@@ -316,7 +316,7 @@ function test_singularity() {
     lotus-miner sectors list
 }
 
-function test_singularity_prep() { # TODO rewrite
+function test_singularity_prep() {
     # Generate test data
     _echo "Generating test data..."
     export DATASET_PATH=/tmp/source
@@ -331,24 +331,50 @@ function test_singularity_prep() { # TODO rewrite
     _echo "Preparing test data via command: $SINGULARITY_CMD"
     $SINGULARITY_CMD
     _echo "Awaiting prep completion."
-    PREP_STATUS=$(timeout 60s singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status')
-    _echo "PREP_STATUS: $PREP_STATUS"
+    PREP_STATUS="blank"
+    MAX_SLEEP_SECS=10
+    while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
+        MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - 1 ))
+        if [ $MAX_SLEEP_SECS -eq 0 ]; then _error "Timeout waiting for prep completion."; fi
+        sleep 1
+        PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
+    done
     export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
     export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
     export CAR_FILE=`ls -tr $CAR_DIR/*.car | tail -1`
 }
 
 function test_singularity_repl() {
-    _echo
+    _echo "Testing replication..."
+    _echo "Importing car: $CAR_FILE"
+    lotus client import --car $CAR_FILE
     export MINERID="t01000"
     unset FULLNODE_API_INFO
     CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
     START_DELAY_DAYS=$(( $CURRENT_EPOCH / 2880 + 1 )) # 1 day floor.
     echo "CURRENT_EPOCH: $CURRENT_EPOCH , START_DELAY_DAYS: $START_DELAY_DAYS"
     DURATION_DAYS=180
-    REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    PRICE="953"
+    REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
     _echo "Executing replication command: $REPL_CMD" 
     $REPL_CMD
+}
+
+function test_miner_import_WIP() {
+    MARKETS_API_INFO="SETME"
+    MINER_API_INFO="SETME"
+    # Which utility to use?: singularity-import
+    AUTO_IMPORT_SCRIPT="$HOME/singularity/scripts/auto-import.sh"
+    # Example: ./auto-import.sh <car_dir_path> <verified_client_address>
+    # auto-import.sh requires variables to be set.
+    # Tested this is working: lotus-miner storage-deals import-data <proposal CID> <file>
+    _echo "importing storage deals..."
+    $AUTO_IMPORT_SCRIPT $CAR_DIR $CLIENT_WALLET_ADDRESS
+}
+
+function test_retrieve_WIP() {
+    ## TODO function to install IPFS.
+    lotus client retrieve --car --provider t01000 $CID /root/singularity-integ-test/lotus/retrieve.out
 }
 
 function full_rebuild_test() {
