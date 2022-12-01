@@ -135,7 +135,7 @@ function start_daemons() {
 
 function start_singularity() {
     _echo "Starting singularity daemon..."
-    nohup singularity daemon 2>&1 >> /var/log/singularity.log &
+    nohup singularity daemon >> /var/log/singularity.log 2>&1 &
     _echo "Awaiting singularity start..."
     timeout 1m bash -c 'until singularity prep list; do sleep 10; done'
     timeout 30s bash -c 'until singularity repl list; do sleep 10; done'
@@ -145,6 +145,19 @@ function start_singularity() {
 function stop_singularity() {
     pkill -f 'node.*singularity'
     pkill -f '.*mongod-x64-ubuntu'
+}
+
+function setup_ipfs() {
+    wget https://dist.ipfs.tech/kubo/v0.17.0/kubo_v0.17.0_linux-amd64.tar.gz
+    tar -xvzf kubo_v0.17.0_linux-amd64.tar.gz
+    cd kubo
+    bash install.sh
+    ipfs --version
+    ipfs init --profile server
+}
+
+function start_ipfs() {
+    nohup ipfs daemon >> /var/log/ipfs.log 2>&1 &
 }
 
 # Setup SP_WALLET_ADDRESS, CLIENT_WALLET_ADDRESS
@@ -378,6 +391,8 @@ function test_retrieve_WIP() {
 }
 
 function full_rebuild_test() {
+    setup_ipfs
+    start_ipfs
     rebuild
     init_daemons && sleep 10
 
