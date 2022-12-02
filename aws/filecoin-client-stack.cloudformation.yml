@@ -126,108 +126,144 @@ Resources:
           }
           trap 'my_trap' ERR
 
-          echo "## Installing Dependencies..."
-          cd /root
-          apt update
-          apt install -y git openssl gcc rsync make jq unzip nfs-common
-          apt install -y software-properties-common
-          apt install -y sysstat iotop
+          export HOME=/root
+          cd $HOME
 
-          # Cloudformation helper scripts on default python 3.8
+          echo "## Installing AWS dependencies..."
           wget --no-verbose -O /tmp/aws-cfn-bootstrap-py3-latest.tar.gz https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
           python3 -m easy_install --script-dir /opt/aws/bin /tmp/aws-cfn-bootstrap-py3-latest.tar.gz
-
-          echo "Dumping environment..." && env
-          #echo "HOME: $HOME"
-          #echo "echo ~ : "`echo ~`
-          #echo "file /root/.bashrc : "`file /root/.bashrc` 
-
-          # Node 16
-          echo "## Installing NVM..." 
-          # Install nvm (https://github.com/nvm-sh/nvm#install--update-script)
-          export HOME=/root
-          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
-          source /root/.bashrc
-
-          # Try dot sourcing nvm scripts again just in case.
-          export NVM_DIR="$HOME/.nvm"
-          . "$NVM_DIR/nvm.sh"
-          . "$NVM_DIR/bash_completion"
-
-          echo "## nvm version: "`nvm version`
-          echo "## Installing Node..." 
-          nvm install 16
-
-          echo "## which node: "`which node`
-          echo "## node --version: "`node --version`
-
           # AWS CLI v2
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
           unzip -q awscliv2.zip
           ./aws/install
+          echo "## AWS dependencies installed."
 
-          # Golang 1.18 and stream-commp
-          wget --no-verbose -c https://go.dev/dl/go1.18.3.linux-amd64.tar.gz
-          tar -C /usr/local/ -xzf go1.18.3.linux-amd64.tar.gz
-          echo 'export GOPATH=/root/go' >> ~/.bashrc
-          echo 'export GOBIN=$GOPATH/bin' >> ~/.bashrc
-          echo 'export GOROOT=/usr/local/go' >> ~/.bashrc
-          echo 'export PATH=$PATH:$GOPATH/bin:$GOROOT/bin' >> ~/.bashrc
-          # set envars, because sourcing .bashrc appears not to work in userdata.
-          export HOME=/root
-          export GOPATH=/root/go
-          export GOBIN=$GOPATH/bin
-          export GOROOT=/usr/local/go
-          export PATH=$PATH:$GOPATH/bin:$GOROOT/bin
-          go version
-          go install github.com/filecoin-project/go-fil-commp-hashhash/cmd/stream-commp@latest
-          echo "## which stream-commp:"`which stream-commp`
-
-          # Mount NVMe (SSD) instance store volume (Only for EC2 instance types that support it)
-          # mkfs -t xfs /dev/nvme1n1
-          # apt install -y xfsprogs
-          # mkdir /local
-          # mount /dev/nvme1n1 /local
-
-          # Repos
-          cd /root
-          git clone https://github.com/tech-greedy/singularity.git
+          echo "## Downloading Repo"
           git clone https://github.com/frank-ang/singularity-integ-test.git
+          cd ./singularity-integ-test && git fetch && git switch test
+          
+          echo "## Setting up ubuntu prereqs for ubuntu..."
+          # cd $HOME/singularity-integ-test/aws/ # TODO need to change current directory or no???
+          $HOME/singularity-integ-test/aws/filecoin-ubuntu-setup.sh run >> /var/logs/filecoin-ubuntu-setup.log 2>&1  
+          nohup ./filecoin-tools-setup.sh run >> /var/logs/filecoin-tools-setup.log 2>&1
 
-          echo "## building singularity..."
-          cd singularity-integ-test && git fetch && git switch test
-          cd $HOME
-          cp -f singularity-integ-test/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
-          cd singularity
-          npm ci
-          npm run build
-          npm link
-          npx singularity -h
+          echo "## Installing Cloudformation helper scripts on default python 3.8..."
+          wget --no-verbose -O /tmp/aws-cfn-bootstrap-py3-latest.tar.gz https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+          python3 -m easy_install --script-dir /opt/aws/bin /tmp/aws-cfn-bootstrap-py3-latest.tar.gz
+          echo "## Installing AWS CLI v2..."
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          ./aws/install
 
-          # Install Generate CAR dependency
-          cd $HOME
-          git clone https://github.com/tech-greedy/go-generate-car.git
-          cd go-generate-car
-          make
+          echo "## Kicking off Filecoin client tools setup (background process)..."
+          # cd $HOME/singularity-integ-test/aws/ # TODO need to change current directory or no???
+          $HOME/singularity-integ-test/aws/filecoin-tools-setup.sh run >> /var/logs/filecoin-tools-setup.log 2>&1  
+          nohup ./filecoin-tools-setup.sh run >> /var/logs/filecoin-tools-setup.log 2>&1
 
-          # singularity cloned locally ./node_modules/.bin
-          mv ./generate-car /root/singularity/node_modules/.bin
+          function legacy_commands() {
+              echo "## Installing Dependencies..."
+              cd $HOME
+              apt update
+              apt install -y git openssl gcc rsync make jq unzip nfs-common
+              apt install -y software-properties-common
+              apt install -y sysstat iotop
 
-          echo "## Singularity installed. Now running test script."
+              # Cloudformation helper scripts on default python 3.8
+              wget --no-verbose -O /tmp/aws-cfn-bootstrap-py3-latest.tar.gz https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+              python3 -m easy_install --script-dir /opt/aws/bin /tmp/aws-cfn-bootstrap-py3-latest.tar.gz
 
-          # Singularity init, run daemon, prep etc. Run a test script
-          cd $HOME
-          # git clone https://github.com/frank-ang/singularity-integ-test.git
-          cd singularity-integ-test
-          # git fetch
-          # git switch test
-          cd ./singularity
-          nohup ./singularity-tests.sh >> ../singularity-tests.log 2>&1 &
+              echo "Dumping environment..." && env
+              #echo "HOME: $HOME"
+              #echo "echo ~ : "`echo ~`
+              #echo "file /root/.bashrc : "`file /root/.bashrc` 
 
-          # Lotus build, init, start daemon, verify.
-          echo "## building lotus..."
-          cd $HOME/singularity-integ-test/lotus
-          nohup ./lotus-init-devnet.sh run >> ../lotus-init-devnet.log 2>&1 &
+              # Node 16
+              echo "## Installing NVM..." 
+              # Install nvm (https://github.com/nvm-sh/nvm#install--update-script)
+              export HOME=/root
+              curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
+              source /root/.bashrc
+
+              # Try dot sourcing nvm scripts again just in case.
+              export NVM_DIR="$HOME/.nvm"
+              . "$NVM_DIR/nvm.sh"
+              . "$NVM_DIR/bash_completion"
+
+              echo "## nvm version: "`nvm version`
+              echo "## Installing Node..." 
+              nvm install 16
+
+              echo "## which node: "`which node`
+              echo "## node --version: "`node --version`
+
+              # AWS CLI v2
+              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+              unzip -q awscliv2.zip
+              ./aws/install
+
+              # Golang 1.18 and stream-commp
+              wget --no-verbose -c https://go.dev/dl/go1.18.3.linux-amd64.tar.gz
+              tar -C /usr/local/ -xzf go1.18.3.linux-amd64.tar.gz
+              echo 'export GOPATH=/root/go' >> ~/.bashrc
+              echo 'export GOBIN=$GOPATH/bin' >> ~/.bashrc
+              echo 'export GOROOT=/usr/local/go' >> ~/.bashrc
+              echo 'export PATH=$PATH:$GOPATH/bin:$GOROOT/bin' >> ~/.bashrc
+              # set envars, because sourcing .bashrc appears not to work in userdata.
+              export HOME=/root
+              export GOPATH=/root/go
+              export GOBIN=$GOPATH/bin
+              export GOROOT=/usr/local/go
+              export PATH=$PATH:$GOPATH/bin:$GOROOT/bin
+              go version
+              go install github.com/filecoin-project/go-fil-commp-hashhash/cmd/stream-commp@latest
+              echo "## which stream-commp:"`which stream-commp`
+
+              # Mount NVMe (SSD) instance store volume (Only for EC2 instance types that support it)
+              # mkfs -t xfs /dev/nvme1n1
+              # apt install -y xfsprogs
+              # mkdir /local
+              # mount /dev/nvme1n1 /local
+
+              # Repos
+              cd $HOME
+              git clone https://github.com/tech-greedy/singularity.git
+              git clone https://github.com/frank-ang/singularity-integ-test.git
+
+              echo "## building singularity..."
+              cd singularity-integ-test && git fetch && git switch test
+              cd $HOME
+              cp -f singularity-integ-test/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
+              cd singularity
+              npm ci
+              npm run build
+              npm link
+              npx singularity -h
+
+              # Install Generate CAR dependency
+              cd $HOME
+              git clone https://github.com/tech-greedy/go-generate-car.git
+              cd go-generate-car
+              make
+
+              # singularity cloned locally ./node_modules/.bin
+              mv ./generate-car /root/singularity/node_modules/.bin
+
+              echo "## Singularity installed. Now running test script."
+
+              # Singularity init, run daemon, prep etc. Run a test script
+              cd $HOME
+              # git clone https://github.com/frank-ang/singularity-integ-test.git
+              cd singularity-integ-test
+              # git fetch
+              # git switch test
+              cd ./singularity
+              nohup ./singularity-tests.sh >> ../singularity-tests.log 2>&1 &
+
+              # Lotus build, init, start daemon, verify.
+              echo "## building lotus..."
+              cd $HOME/singularity-integ-test/lotus
+              nohup ./lotus-init-devnet.sh run >> ../lotus-init-devnet.log 2>&1 &
+          }
 
           # All done, signal success.
           echo "## Signaling successful to CloudFormation."
