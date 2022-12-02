@@ -171,7 +171,7 @@
   #
   # type: Duration
   # env var: LOTUS_DEALMAKING_EXPECTEDSEALDURATION
-  #ExpectedSealDuration = "24h0m0s"
+  ExpectedSealDuration = "1h0m0s"
 
   # Maximum amount of time proposed deal StartEpoch can be in future
   #

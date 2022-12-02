@@ -70,18 +70,4 @@ export ACTUAL_CAR_COUNT=`find $OUT_DIR -type f | wc -l`
 echo "count of regular files in $OUT_DIR: $ACTUAL_CAR_COUNT"
 if [ $ACTUAL_CAR_COUNT -ne $EXPECTED_CAR_COUNT ]; then _error "unexpected count of files: $ACTUAL_CAR_COUNT -ne $EXPECTED_CAR_COUNT"; fi
 
-# TODO need to dive into the following command: 
-#   ```singularity prep  generation-status $GENERATION_ID_TODO.``` 
-# which returns CIDs and file index. 
-
-# TODO additional test verification.
-
-# TODO verify database query
-# TODO verify CAR structure.
-# TODO un-CAR and diff.
-
-# TODO additional tests.
-
-# TODO post test results somewhere.
-
 echo "End of test script."

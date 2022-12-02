@@ -153,7 +153,7 @@ export default class DealReplicationWorker extends BaseService {
     } else {
       unit = math.unit(0, 'm');
     }
-    return math.format(unit.toNumber(), { notation: 'fixed' });
+    return math.format(unit.toNumber().toFixed(18), { notation: 'fixed' });
   }
 
   private static assembleDownloadUrl (urlPrefix: string, pieceCid?: string, filenameOverride?: string) {
@@ -415,11 +415,12 @@ export default class DealReplicationWorker extends BaseService {
           }
 
           const startDelay = replicationRequest.startDelay ? replicationRequest.startDelay : 20160;
-          // const currentHeight = HeightFromCurrentTime(); // frank-ang: TODO hacky fix: get actual block height from devnet. 
-          const currentHeight = `${this.lotusCMD} status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p'`;
-          this.logger.warn(`#### Current height: ${currentHeight}`)
-
-          const startEpoch = startDelay + currentHeight + 60; // 30 min buffer time
+          const currentHeight_orig = HeightFromCurrentTime();
+          // frank-ang: TODO hacky fix for devnet: get actual block height from lotus.
+          this.logger.warn("#### TODO HACK: calling lotusBlockHeight... ");
+          const currentHeight = await this.lotusBlockHeight();
+          this.logger.warn(`#### TODO HACK: Current heights, devnet: ${currentHeight}, mainnet: ${currentHeight_orig}`)
+          const startEpoch = Number(60 + startDelay + currentHeight!); // 30 min buffer time.
           this.logger.debug(`Calculated start epoch startDelay: ${startDelay} + currentHeight: ${currentHeight} + 60 = ${startEpoch}`);
           let dealCmd = '';
           try {
@@ -598,4 +599,28 @@ export default class DealReplicationWorker extends BaseService {
       }
     );
   }
+
+  private async lotusBlockHeight (): Promise<number> {
+    let blockHeight = 0;
+    const statusCommand = `${this.lotusCMD} status`
+    const cmdOut = await exec(statusCommand);
+    if (cmdOut.stdout != undefined) { // TS2532: Object is possibly 'undefined'.
+      var outString = cmdOut.stdout.toString().trim();
+      this.logger.info(`## lotusBlockHeight command stdout: ${outString}`);
+      const re = new RegExp(/Sync Epoch: ([0-9]+)[^0-9]+.*/);
+      // note, working cli pipe: | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p'
+      // var matches = outString.match(re)[1]
+      var matchString = outString.match(re)?.[1] // TS2531: Object is possibly 'null'
+      this.logger.info(`## lotusBlockHeight matchString: ${matchString}`);
+      if (typeof matchString === 'string') {
+        blockHeight = parseInt(matchString); // TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'
+      } else {
+        throw new Error(`Error while parsing block height: ${matchString}`);
+      }
+    } else {
+      throw new Error(JSON.stringify(cmdOut));
+    }
+    return blockHeight;
+  }
+
 }

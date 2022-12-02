@@ -1,7 +1,7 @@
 # AWS resources.
 SHELL=/bin/bash
 STACK_NAME="filecoin-singularity-appliance-test"
-AWS_APPLIANCE_TEMPLATE=singularity/singularity-cloudformation.yml
+AWS_APPLIANCE_TEMPLATE=aws/filecoin-client-stack.cloudformation.yml
 AWS_APPLIANCE_INSTANCE_ID=$(shell aws cloudformation describe-stacks --stack-name ${STACK_NAME} | jq -r '.Stacks[].Outputs[]|select(.OutputKey=="InstanceId").OutputValue')
 AWS_APPLIANCE_IP=$(shell aws ec2 describe-instances --instance-id ${AWS_APPLIANCE_INSTANCE_ID} | jq -r '.Reservations[].Instances[].PublicIpAddress')
 

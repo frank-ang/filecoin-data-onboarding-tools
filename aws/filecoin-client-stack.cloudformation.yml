@@ -129,7 +129,7 @@ Resources:
           echo "## Installing Dependencies..."
           cd /root
           apt update
-          apt install -y git openssl rsync make jq unzip nfs-common
+          apt install -y git openssl gcc rsync make jq unzip nfs-common
           apt install -y software-properties-common
           apt install -y sysstat iotop
 
@@ -137,15 +137,12 @@ Resources:
           wget --no-verbose -O /tmp/aws-cfn-bootstrap-py3-latest.tar.gz https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
           python3 -m easy_install --script-dir /opt/aws/bin /tmp/aws-cfn-bootstrap-py3-latest.tar.gz
 
-          # DUMP ENV
-          echo "Dumping environment..."
-          env
-          echo "HOME: $HOME"
-          echo "echo ~ : "`echo ~`
-          echo "file /root/.bashrc : "`file /root/.bashrc` 
+          echo "Dumping environment..." && env
+          #echo "HOME: $HOME"
+          #echo "echo ~ : "`echo ~`
+          #echo "file /root/.bashrc : "`file /root/.bashrc` 
 
           # Node 16
-
           echo "## Installing NVM..." 
           # Install nvm (https://github.com/nvm-sh/nvm#install--update-script)
           export HOME=/root
@@ -192,33 +189,26 @@ Resources:
           # mkdir /local
           # mount /dev/nvme1n1 /local
 
-          # Repo
+          # Repos
           cd /root
           git clone https://github.com/tech-greedy/singularity.git
           git clone https://github.com/frank-ang/singularity-integ-test.git
-          cp singularity-integ-test/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
 
+          echo "## building singularity..."
+          cd singularity-integ-test && git fetch && git switch test
+          cd $HOME
+          cp -f singularity-integ-test/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
           cd singularity
           npm ci
           npm run build
           npm link
           npx singularity -h
 
-          # Install Singularity # TODO ERR 127 ? 
-          #npm i -g @techgreedy/singularity
-          #which singularity-prepare
-          #singularity-prepare -h
-
           # Install Generate CAR dependency
-          cd /root
+          cd $HOME
           git clone https://github.com/tech-greedy/go-generate-car.git
           cd go-generate-car
           make
-
-          # Then copy the generated binary to override the existing one from the PATH for your node environment, i.e.
-          # singularity installed globally /home/user/.nvm/versions/node/v16.xx.x/lib/node_modules/.bin
-          # ls: cannot access '/root/.nvm/versions/node/v16.15.1/lib/node_modules/.bin': No such file or directory
-          # mv ./generate-car /root/singularity/node_modules/.bin
 
           # singularity cloned locally ./node_modules/.bin
           mv ./generate-car /root/singularity/node_modules/.bin
@@ -227,14 +217,15 @@ Resources:
 
           # Singularity init, run daemon, prep etc. Run a test script
           cd $HOME
-          git clone https://github.com/frank-ang/singularity-integ-test.git
+          # git clone https://github.com/frank-ang/singularity-integ-test.git
           cd singularity-integ-test
-          git fetch
-          git switch test
+          # git fetch
+          # git switch test
           cd ./singularity
           nohup ./singularity-tests.sh >> ../singularity-tests.log 2>&1 &
 
           # Lotus build, init, start daemon, verify.
+          echo "## building lotus..."
           cd $HOME/singularity-integ-test/lotus
           nohup ./lotus-init-devnet.sh run >> ../lotus-init-devnet.log 2>&1 &
 

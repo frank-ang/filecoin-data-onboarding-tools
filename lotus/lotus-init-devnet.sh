@@ -135,7 +135,7 @@ function start_daemons() {
 
 function start_singularity() {
     _echo "Starting singularity daemon..."
-    nohup singularity daemon 2>&1 >> /var/log/singularity.log &
+    nohup singularity daemon >> /var/log/singularity.log 2>&1 &
     _echo "Awaiting singularity start..."
     timeout 1m bash -c 'until singularity prep list; do sleep 10; done'
     timeout 30s bash -c 'until singularity repl list; do sleep 10; done'
@@ -145,6 +145,24 @@ function start_singularity() {
 function stop_singularity() {
     pkill -f 'node.*singularity'
     pkill -f '.*mongod-x64-ubuntu'
+}
+
+function setup_ipfs() {
+    wget https://dist.ipfs.tech/kubo/v0.17.0/kubo_v0.17.0_linux-amd64.tar.gz
+    tar -xvzf kubo_v0.17.0_linux-amd64.tar.gz
+    cd kubo
+    bash install.sh
+    ipfs --version
+    ipfs init --profile server
+    ipfs config --json Swarm.ResourceMgr.Limits.System.FD: 8192
+}
+
+function start_ipfs() {
+    nohup ipfs daemon >> /var/log/ipfs.log 2>&1 &
+}
+
+function stop_ipfs() {
+    ipfs shutdown
 }
 
 # Setup SP_WALLET_ADDRESS, CLIENT_WALLET_ADDRESS
@@ -175,7 +193,7 @@ function setup_wallets() {
 
 function _prep_test_data() {
     # Generate test data
-    _echo "Preparing test data..."
+    _echo "Generating test data..."
     export DATASET_PATH=/tmp/source
     export CAR_DIR=/tmp/car
     export DATASET_NAME=`uuidgen | cut -d'-' -f1`
@@ -184,15 +202,10 @@ function _prep_test_data() {
     rm -rf $CAR_DIR && mkdir -p $CAR_DIR
     rm -rf $DATASET_PATH && mkdir -p $DATASET_PATH
     dd if=/dev/urandom of="$DATASET_PATH/$DATASET_NAME.dat" bs=1024 count=1 iflag=fullblock
-
-    # Run data prep test
-    echo "Running test..."
     export SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_PATH $CAR_DIR"
-    echo "executing command: $SINGULARITY_CMD"
+    _echo "Preparing data via command: $SINGULARITY_CMD"
     $SINGULARITY_CMD
-
-    # Await prep completion
-    echo "awaiting prep status completion."
+    _echo "Awaiting prep completion."
     sleep 5
     PREP_STATUS="blank"
     MAX_SLEEP_SECS=10
@@ -201,13 +214,12 @@ function _prep_test_data() {
         if [ $MAX_SLEEP_SECS -eq 0 ]; then _error "Timeout waiting for prep success status."; fi
         sleep 1
         PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
-        echo "PREP_STATUS: $PREP_STATUS"
+        _echo "PREP_STATUS: $PREP_STATUS"
     done
 
     export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
     export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
     export CAR_FILE=`ls -tr $CAR_DIR/*.car | tail -1`
-
 }
 
 function client_lotus_deal() {
@@ -229,12 +241,16 @@ function client_lotus_deal() {
     QUERY_ASK_OUT=$($QUERY_ASK_CMD)
     _echo "query-ask response: $QUERY_ASK_OUT"
 
-    # E.g. Price per GiB: 0.0000000005 FIL, per epoch (30sec) 
-    #      FIL/Epoch for 0.000002 GiB (2KB) : 
+    # E.g. Price per GiB per 30sec epoch: 0.0000000005 FIL
     PRICE=0.000000000000001
-    DURATION=518400 # 180 days
-
-    DEAL_CMD="lotus client deal --from $CLIENT_WALLET_ADDRESS $DATA_CID $MINERID $PRICE $DURATION"
+    CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
+    SEALING_DELAY_EPOCHS=$(( 60 * 2 )) # seconds
+    START_EPOCH=$(( $CURRENT_EPOCH + $SEALING_DELAY_EPOCHS ))
+    DURATION_EPOCHS=$(( 180 * 2880 )) # 180 days
+    _echo "CURRENT_EPOCH:$CURRENT_EPOCH; START_EPOCH (ignored TODO):$START_EPOCH; SEALING_DELAY_EPOCHS:$SEALING_DELAY_EPOCHS; DURATION_EPOCHS:$DURATION_EPOCHS"
+    # TODO: tune miner config.
+    #  StorageDealError when using switch: --start-epoch $START_EPOCH , possibly caused by autosealing miner config.
+    DEAL_CMD="lotus client deal --from $CLIENT_WALLET_ADDRESS $DATA_CID $MINERID $PRICE $DURATION_EPOCHS"
     _echo "Client Dealing... executing: $DEAL_CMD"
     DEAL_ID=`$DEAL_CMD`
     _echo "DEAL_ID: $DEAL_ID"
@@ -243,7 +259,7 @@ function client_lotus_deal() {
     lotus client get-deal $DEAL_ID
 }
 
-function retrieve() { # TODO TEST
+function retrieve() {
     CID=$1
     if [[ -z "$CID" ]]; then
         _echo "CID undefined." 1>&2
@@ -273,53 +289,115 @@ function singularity_test() {
     # or, alternately # export DATASET_NAME=`singularity prep list --json | jq -r '.[].name' | grep -v test | head -1`
     
     singularity prep status --json $DATASET_NAME
-    # Wait for prep generation status to complete. TODO.
-    #   singularity prep generation-status ??
+    # Wait for prep generation status to complete.
+    # TODO: singularity prep generation-status ?
     singularity prep list --json | jq -r '.[] | select(.name==env.DATASET_NAME) | [ .id, .name ]'
     singularity prep list --json | jq -r '.[] | select(.name==env.DATASET_NAME) | ( .id, .name, .scanningStatus, .generationTotal, .generationCompleted )'
 
     _echo "Make deals to storage providers..."
     export MINERID="t01000"
-    # export FULLNODE_API_INFO="localhost"
     CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
-    START_DELAY_DAYS=$(( $CURRENT_EPOCH / 2880 + 1 )) # 1 day floor.
+    START_DELAY_DAYS="0.041" # ~ <60 mins.
     DURATION_DAYS=180
     echo "CURRENT_EPOCH: $CURRENT_EPOCH , START_DELAY_DAYS: $START_DELAY_DAYS , DURATION_DAYS: $DURATION_DAYS"
 
     # Usage: singularity replication start [options] <datasetid> <storage-providers> <client> [# of replica]
-    REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    PRICE="953" #"0.0000000005"
+    # TODO troubleshoot online deals first, 
+    # REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    ## troubleshooting. remove --start-delay
+    REPL_CMD="singularity repl start --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
     _echo "Executing replication command: $REPL_CMD"
     $REPL_CMD
+
+    _echo "sleeping a bit..." && sleep 30
     _echo "listing singularity replications..."
     singularity repl list
     # singularity repl status -v REPLACE_WITH_REPL_ID
+
     lotus-miner storage-deals list -v
     lotus-miner sectors list
-
     _echo "singularity_test completed."
 }
 
-function singularity_verify_test() {
-    _echo "singularity_verify_test starting..."
+function test_singularity() {
+    _echo "test_singularity starting..."
+    test_singularity_prep
     . $TEST_CONFIG_FILE # set wallet addresses env variables.
-    export MINERID="t01000"
-    # export FULLNODE_API_INFO="localhost"
-    unset FULLNODE_API_INFO
-    CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
-    START_DELAY_DAYS=$(( $CURRENT_EPOCH / 2880 + 1 )) # 1 day floor.
-    echo "CURRENT_EPOCH: $CURRENT_EPOCH , START_DELAY_DAYS: $START_DELAY_DAYS"
-    DURATION_DAYS=180
-    REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
-    _echo "Executing replication command: $REPL_CMD" 
-    $REPL_CMD
+    test_singularity_repl
+    _echo "test_singularity verifying..."
     singularity repl list
-    # TODO investigate repl status # deal rejected: invalid deal end epoch 3882897: cannot be more than 1555200 past current epoch 1007
+    # Singularity bug. Does not support devnet block height. (workaround in DealReplicationWorker.ts)
+    # error during repl status # deal rejected: invalid deal end epoch 3882897: cannot be more than 1555200 past current epoch 1007
     # singularity repl status -v 63771015987d840fafb37afa # TODO hardcoded REPLACE_WITH_REPL_ID
     lotus-miner storage-deals list -v
     lotus-miner sectors list
 }
 
+function test_singularity_prep() {
+    # Generate test data
+    _echo "Generating test data..."
+    export DATASET_PATH=/tmp/source
+    export CAR_DIR=/tmp/car
+    export DATASET_NAME=`uuidgen | cut -d'-' -f1`
+    # TODO lets not save in config file?
+    echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
+    rm -rf $CAR_DIR && mkdir -p $CAR_DIR # TODO preserve if exists?
+    rm -rf $DATASET_PATH && mkdir -p $DATASET_PATH # TODO preserve if exists?
+    dd if=/dev/urandom of="$DATASET_PATH/$DATASET_NAME.dat" bs=1024 count=1 iflag=fullblock
+    export SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_PATH $CAR_DIR"
+    _echo "Preparing test data via command: $SINGULARITY_CMD"
+    $SINGULARITY_CMD
+    _echo "Awaiting prep completion."
+    PREP_STATUS="blank"
+    MAX_SLEEP_SECS=10
+    while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
+        MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - 1 ))
+        if [ $MAX_SLEEP_SECS -eq 0 ]; then _error "Timeout waiting for prep completion."; fi
+        sleep 1
+        PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
+    done
+    export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
+    export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
+    export CAR_FILE=`ls -tr $CAR_DIR/*.car | tail -1`
+}
+
+function test_singularity_repl() {
+    _echo "Testing replication..."
+    _echo "Importing car: $CAR_FILE"
+    lotus client import --car $CAR_FILE
+    export MINERID="t01000"
+    unset FULLNODE_API_INFO
+    CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
+    START_DELAY_DAYS=$(( $CURRENT_EPOCH / 2880 + 1 )) # 1 day floor.
+    echo "CURRENT_EPOCH: $CURRENT_EPOCH , START_DELAY_DAYS: $START_DELAY_DAYS"
+    DURATION_DAYS=180
+    PRICE="953"
+    REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    _echo "Executing replication command: $REPL_CMD" 
+    $REPL_CMD
+}
+
+function test_miner_import_WIP() {
+    MARKETS_API_INFO="SETME"
+    MINER_API_INFO="SETME"
+    # Which utility to use?: singularity-import
+    AUTO_IMPORT_SCRIPT="$HOME/singularity/scripts/auto-import.sh"
+    # Example: ./auto-import.sh <car_dir_path> <verified_client_address>
+    # auto-import.sh requires variables to be set.
+    # Tested this is working: lotus-miner storage-deals import-data <proposal CID> <file>
+    _echo "importing storage deals..."
+    $AUTO_IMPORT_SCRIPT $CAR_DIR $CLIENT_WALLET_ADDRESS
+}
+
+function test_retrieve_WIP() {
+    ## TODO function to install IPFS.
+    lotus client retrieve --car --provider t01000 $CID /root/singularity-integ-test/lotus/retrieve.out
+}
+
 function full_rebuild_test() {
+    setup_ipfs
+    start_ipfs
     rebuild
     init_daemons && sleep 10
 
@@ -340,7 +418,7 @@ function full_rebuild_test() {
     lotus-miner sectors list
 
     # Wait some time for deal to seal and appear onchain.
-    SEAL_SLEEP_SECS=$(( 60*3 )) # 3 mins
+    SEAL_SLEEP_SECS=$(( 60*2 )) # 2 mins
     _echo "📦 sleeping $SEAL_SLEEP_SECS secs for sealing..." && sleep $SEAL_SLEEP_SECS
 
     _echo "lotus-miner storage-deals and sectors..."
@@ -351,6 +429,9 @@ function full_rebuild_test() {
     # compare source file with retrieved file.
     _echo "comparing source file with retrieved file."
     diff -r /tmp/source `pwd`/retrieved.car.gitignore && _echo "comparison succeeded."
+
+    # singularity_test
+    test_singularity
 }
 
 # Entry point.
