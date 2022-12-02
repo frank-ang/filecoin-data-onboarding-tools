@@ -33,6 +33,7 @@ function build_lotus() {
 }
 
 function run() {
+    echo "running script $0"
     install_singularity
     init_singularity
     build_lotus

@@ -73,7 +73,7 @@ Parameters:
     Description: EC2 Instance Type
     Type: String
     # Season to taste
-    Default: r5a.2xlarge
+    Default: r5a.xlarge
     AllowedValues:
       - r5a.xlarge
       - r5a.2xlarge
@@ -126,10 +126,11 @@ Resources:
           }
           trap 'my_trap' ERR
 
+          echo "## Installing AWS dependencies..."
+          apt update
+          apt install -y unzip
           export HOME=/root
           cd $HOME
-
-          echo "## Installing AWS dependencies..."
           wget --no-verbose -O /tmp/aws-cfn-bootstrap-py3-latest.tar.gz https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
           python3 -m easy_install --script-dir /opt/aws/bin /tmp/aws-cfn-bootstrap-py3-latest.tar.gz
           # AWS CLI v2
@@ -144,8 +145,7 @@ Resources:
           
           echo "## Setting up ubuntu prereqs for ubuntu..."
           # cd $HOME/singularity-integ-test/aws/ # TODO need to change current directory or no???
-          $HOME/singularity-integ-test/aws/filecoin-ubuntu-setup.sh run >> /var/logs/filecoin-ubuntu-setup.log 2>&1  
-          nohup ./filecoin-tools-setup.sh run >> /var/logs/filecoin-tools-setup.log 2>&1
+          $HOME/singularity-integ-test/aws/filecoin-ubuntu-setup.sh run >> /var/log/filecoin-ubuntu-setup.log 2>&1  
 
           echo "## Installing Cloudformation helper scripts on default python 3.8..."
           wget --no-verbose -O /tmp/aws-cfn-bootstrap-py3-latest.tar.gz https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
@@ -154,6 +154,8 @@ Resources:
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
           unzip -q awscliv2.zip
           ./aws/install
+
+          nohup ./filecoin-tools-setup.sh run >> /var/log/filecoin-tools-setup.log 2>&1
 
           echo "## Kicking off Filecoin client tools setup (background process)..."
           # cd $HOME/singularity-integ-test/aws/ # TODO need to change current directory or no???
