@@ -154,10 +154,15 @@ function setup_ipfs() {
     bash install.sh
     ipfs --version
     ipfs init --profile server
+    ipfs config --json Swarm.ResourceMgr.Limits.System.FD: 8192
 }
 
 function start_ipfs() {
     nohup ipfs daemon >> /var/log/ipfs.log 2>&1 &
+}
+
+function stop_ipfs() {
+    ipfs shutdown
 }
 
 # Setup SP_WALLET_ADDRESS, CLIENT_WALLET_ADDRESS
