@@ -57,3 +57,5 @@ function run() {
     install_golang
     echo "completed script $0"
 }
+
+$@ # Execute function from parameters
