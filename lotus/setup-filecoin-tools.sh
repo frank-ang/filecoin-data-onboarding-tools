@@ -570,6 +570,9 @@ function run() {
     full_rebuild_test
 }
 
+. ~/.bashrc
+which go
+
 # Execute function from parameters
 $@
 _echo "Lotus Linux devnet test completed: $0"
