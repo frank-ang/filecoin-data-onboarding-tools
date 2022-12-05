@@ -1,4 +1,7 @@
 #!/bin/bash
+#
+# Installs prereqs on Ubuntu, required for Filecoin client tools.
+#
 
 function install_dependencies() {
     echo "## Installing Dependencies..."
@@ -52,4 +55,5 @@ function run() {
     install_dependencies
     install_node
     install_golang
+    echo "completed script $0"
 }

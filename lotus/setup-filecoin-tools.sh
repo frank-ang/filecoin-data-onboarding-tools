@@ -281,6 +281,31 @@ function retrieve_wait() {
     done
 }
 
+function setup_singularity() {
+    rm -rf $HOME/singularity
+    rm -rf $HOME/.singularity
+    _echo "## cloning singularity repo..."
+    cd $HOME
+    git clone https://github.com/tech-greedy/singularity.git
+    _echo "## deploying hacky patch to DealReplicationWorker.ts for devnet blockheight."
+    cp -f singularity-integ-test/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
+    _echo "## building singularity..."
+    cd singularity
+    npm ci
+    npm run build
+    npm link
+    npx singularity -h
+    _echo "Installing go-generate-car dependency..."
+    cd $HOME
+    git clone https://github.com/tech-greedy/go-generate-car.git
+    cd go-generate-car
+    make
+    mv ./generate-car /root/singularity/node_modules/.bin
+    echo "## Singularity installed. Now running singularity init and prep test..."
+    cd $HOME/singularity-integ-test/singularity
+    ./singularity-tests.sh # >> ../singularity-tests.log 2>&1 & .
+}
+
 function singularity_test() {
     _echo "singularity_test starting..."
     . $TEST_CONFIG_FILE # set wallet addresses env variables.
@@ -396,6 +421,7 @@ function test_retrieve_WIP() {
 }
 
 function full_rebuild_test() {
+    setup_singularity
     setup_ipfs
     start_ipfs
     rebuild
