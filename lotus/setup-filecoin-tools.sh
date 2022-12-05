@@ -21,6 +21,9 @@ LOTUS_SOURCE=$HOME/lotus/
 LOTUS_DAEMON_LOG=${LOTUS_SOURCE}lotus-daemon.log
 LOTUS_MINER_LOG=${LOTUS_SOURCE}lotus-miner.log
 SINGULARITY_OUT_CSV=`pwd`"/singularity-out.csv"
+export NVM_DIR="$HOME/.nvm"
+. "$NVM_DIR/nvm.sh"
+. "$NVM_DIR/bash_completion"
 
 # increase limits for Singularity
 ulimit -n 100000
