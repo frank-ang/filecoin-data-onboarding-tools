@@ -22,6 +22,11 @@ LOTUS_DAEMON_LOG=${LOTUS_SOURCE}lotus-daemon.log
 LOTUS_MINER_LOG=${LOTUS_SOURCE}lotus-miner.log
 SINGULARITY_OUT_CSV=`pwd`"/singularity-out.csv"
 export CAR_DIR=/tmp/car
+# set golang envars, because sourcing .bashrc appears not to work in userdata.
+export GOPATH=/root/go
+export GOBIN=$GOPATH/bin
+export GOROOT=/usr/local/go
+export PATH=$PATH:$GOPATH/bin:$GOROOT/bin
 export NVM_DIR="$HOME/.nvm"
 . "$NVM_DIR/nvm.sh"
 . "$NVM_DIR/bash_completion"
@@ -570,9 +575,8 @@ function run() {
     full_rebuild_test
 }
 
-. ~/.bashrc
-which go
-
 # Execute function from parameters
+_echo "which go..."
+which go
 $@
 _echo "Lotus Linux devnet test completed: $0"
