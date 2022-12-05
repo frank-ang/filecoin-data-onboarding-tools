@@ -21,6 +21,7 @@ LOTUS_SOURCE=$HOME/lotus/
 LOTUS_DAEMON_LOG=${LOTUS_SOURCE}lotus-daemon.log
 LOTUS_MINER_LOG=${LOTUS_SOURCE}lotus-miner.log
 SINGULARITY_OUT_CSV=`pwd`"/singularity-out.csv"
+export CAR_DIR=/tmp/car
 export NVM_DIR="$HOME/.nvm"
 . "$NVM_DIR/nvm.sh"
 . "$NVM_DIR/bash_completion"
@@ -424,7 +425,6 @@ function test_singularity_prep() {
     # Generate test data
     _echo "Generating test data..."
     export DATASET_PATH=/tmp/source
-    export CAR_DIR=/tmp/car
     export DATASET_NAME=`uuidgen | cut -d'-' -f1`
     # TODO lets not save in config file?
     echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
@@ -464,7 +464,37 @@ function test_singularity_repl() {
     $REPL_CMD
 }
 
-function test_miner_import_WIP() {
+function test_miner_lotus_import_car() {
+    export CAR_FILE=`ls -tr $CAR_DIR/*.car | tail -1`
+    # Tested this is working: lotus-miner storage-deals import-data <proposal CID> <file>
+    _echo "Importing car file. Typically, offline data transfer required."
+    # Hack to get PROPOSAL_CID from CLI table, not tested for repeating rows.
+    REPL_ID=$(singularity repl list | sed -n 's/^│    0    │ '\''\([^'\'']*\).*/\1/p')
+    DEAL_CID=$(singularity repl status -v $REPL_ID | jq -r '.deals[].dealCid')
+    # DATA_CID=$(singularity repl status -v $REPL_ID | jq -r '.deals[].dataCid')
+    IMPORT_CMD="lotus-miner storage-deals import-data $DEAL_CID $CAR_FILE"
+    _echo "executing: $IMPORT_CMD"
+    $IMPORT_CMD
+    _echo "CAR file imported. Awaiting miner sealing..."
+    _echo "Polling for deal status to go StorageDealActive..."
+    DEAL_STATUS="blank"
+    MAX_POLL_RETRY=12
+    while [[ "$DEAL_STATUS" != "StorageDealActive" && $MAX_POLL_RETRY -ge 0 ]]; do
+        MAX_POLL_RETRY=$(( $MAX_POLL_RETRY - 1 ))
+        if [ $MAX_POLL_RETRY -eq 0 ]; then _error "Timeout waiting for prep deal status to go StorageDealActive."; fi
+        sleep 10
+        DEAL_STATUS=$( lotus-miner storage-deals list -v | grep $DEAL_CID | tr -s ' ' | cut -d ' ' -f7 )
+        _echo "DEAL_STATUS: $DEAL_STATUS"
+    done
+    LOTUS_GET_DEAL_CMD="lotus client get-deal $DEAL_CID"
+    _echo "Querying lotus client deal status. Executing: $LOTUS_GET_DEAL_CMD"
+    $LOTUS_GET_DEAL_CMD
+    SINGULARITY_DEAL_STATUS_MD="singularity repl status -v $REPL_ID"
+    _echo "Querying singularity client deal status. Executing: $SINGULARITY_DEAL_STATUS_MD"
+    $SINGULARITY_DEAL_STATUS_MD
+}
+
+function test_miner_auto_import_script() {
     MARKETS_API_INFO="SETME"
     MINER_API_INFO="SETME"
     # Which utility to use?: singularity-import
@@ -521,6 +551,8 @@ function full_rebuild_test() {
 
     # singularity_test
     test_singularity
+    sleep 10
+    test_miner_lotus_import_car
 }
 
 # Entry point.
