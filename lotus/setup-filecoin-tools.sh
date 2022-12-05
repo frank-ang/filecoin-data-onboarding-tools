@@ -25,6 +25,7 @@ export CAR_DIR=/tmp/car
 export NVM_DIR="$HOME/.nvm"
 . "$NVM_DIR/nvm.sh"
 . "$NVM_DIR/bash_completion"
+export MINERID="t01000"
 
 # increase limits for Singularity
 ulimit -n 100000
@@ -409,8 +410,9 @@ function singularity_test() {
 
 function test_singularity() {
     _echo "test_singularity starting..."
+    . $TEST_CONFIG_FILE
+    generate_test_data
     test_singularity_prep
-    . $TEST_CONFIG_FILE # set wallet addresses env variables.
     test_singularity_repl
     _echo "test_singularity verifying..."
     singularity repl list
@@ -419,19 +421,25 @@ function test_singularity() {
     # singularity repl status -v 63771015987d840fafb37afa # TODO hardcoded REPLACE_WITH_REPL_ID
     lotus-miner storage-deals list -v
     lotus-miner sectors list
+    _echo "test_singularity completed."
+}
+
+function generate_test_data() {
+    echo "generate_test_data..."
+    export DATASET_NAME=`uuidgen | cut -d'-' -f1`
+    export DATASET_SOURCE_DIR=/tmp/source/$DATASET_NAME
+    rm -rf $DATASET_SOURCE_DIR && mkdir -p $DATASET_SOURCE_DIR
+    DATA_FILE="$DATASET_SOURCE_DIR/$DATASET_NAME.dat"
+    dd if=/dev/urandom of="$DATA_FILE" bs=1024 count=1 iflag=fullblock
+    echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
 }
 
 function test_singularity_prep() {
-    # Generate test data
-    _echo "Generating test data..."
-    export DATASET_PATH=/tmp/source
-    export DATASET_NAME=`uuidgen | cut -d'-' -f1`
-    # TODO lets not save in config file?
-    echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
-    rm -rf $CAR_DIR && mkdir -p $CAR_DIR # TODO preserve if exists?
-    rm -rf $DATASET_PATH && mkdir -p $DATASET_PATH # TODO preserve if exists?
-    dd if=/dev/urandom of="$DATASET_PATH/$DATASET_NAME.dat" bs=1024 count=1 iflag=fullblock
-    export SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_PATH $CAR_DIR"
+    _echo "Testing singularity prep..."
+    export CAR_DIR=/tmp/car/$DATASET_NAME
+    DATASET_SOURCE_DIR=/tmp/source/$DATASET_NAME
+    rm -rf $CAR_DIR && mkdir -p $CAR_DIR
+    SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_SOURCE_DIR $CAR_DIR"
     _echo "Preparing test data via command: $SINGULARITY_CMD"
     $SINGULARITY_CMD
     _echo "Awaiting prep completion."
@@ -449,10 +457,10 @@ function test_singularity_prep() {
 }
 
 function test_singularity_repl() {
-    _echo "Testing replication..."
-    _echo "Importing car: $CAR_FILE"
-    lotus client import --car $CAR_FILE
-    export MINERID="t01000"
+    _echo "Testing singularity replicate..."
+    LOTUS_CLIENT_IMPORT_CAR_CMD="lotus client import --car $CAR_FILE"
+    _echo "Importing car into lotus: $LOTUS_CLIENT_IMPORT_CAR_CMD"
+    $LOTUS_CLIENT_IMPORT_CAR_CMD
     unset FULLNODE_API_INFO
     CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
     START_DELAY_DAYS=$(( $CURRENT_EPOCH / 2880 + 1 )) # 1 day floor.
@@ -464,7 +472,9 @@ function test_singularity_repl() {
     $REPL_CMD
 }
 
-function test_miner_lotus_import_car() {
+function test_miner_import_car() {
+    . $TEST_CONFIG_FILE
+    export CAR_DIR=/tmp/car/$DATASET_NAME
     export CAR_FILE=`ls -tr $CAR_DIR/*.car | tail -1`
     # Tested this is working: lotus-miner storage-deals import-data <proposal CID> <file>
     _echo "Importing car file. Typically, offline data transfer required."
@@ -552,7 +562,7 @@ function full_rebuild_test() {
     # singularity_test
     test_singularity
     sleep 10
-    test_miner_lotus_import_car
+    test_miner_import_car
 }
 
 # Entry point.
