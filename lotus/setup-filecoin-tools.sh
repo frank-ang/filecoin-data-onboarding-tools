@@ -486,27 +486,30 @@ function test_miner_import_car() {
     # Hack to get PROPOSAL_CID from CLI table, not tested for repeating rows.
     REPL_ID=$(singularity repl list | sed -n 's/^│    0    │ '\''\([^'\'']*\).*/\1/p')
     DEAL_CID=$(singularity repl status -v $REPL_ID | jq -r '.deals[].dealCid')
-    # DATA_CID=$(singularity repl status -v $REPL_ID | jq -r '.deals[].dataCid')
+    # don't need this until retrieval test. DATA_CID=$(singularity repl status -v $REPL_ID | jq -r '.deals[].dataCid')
     IMPORT_CMD="lotus-miner storage-deals import-data $DEAL_CID $CAR_FILE"
     _echo "executing: $IMPORT_CMD"
     $IMPORT_CMD
     _echo "CAR file imported. Awaiting miner sealing..."
-    _echo "Polling for deal status to go StorageDealActive..."
     DEAL_STATUS="blank"
-    MAX_POLL_RETRY=12
+    MAX_POLL_SECS=600
+    SLEEP_INTERVAL=10
+    _echo "Polling $MAX_POLL_SECS seconds, for deal status to go StorageDealActive..."
     while [[ "$DEAL_STATUS" != "StorageDealActive" && $MAX_POLL_RETRY -ge 0 ]]; do
-        MAX_POLL_RETRY=$(( $MAX_POLL_RETRY - 1 ))
-        if [ $MAX_POLL_RETRY -eq 0 ]; then _error "Timeout waiting for prep deal status to go StorageDealActive."; fi
-        sleep 10
+        MAX_POLL_SECS=$(( $MAX_POLL_SECS - $SLEEP_INTERVAL ))
+        if [ $MAX_POLL_SECS -eq 0 ]; then _error "Timeout exceeded $MAX_POLL_SECS seconds waiting for prep deal status to go StorageDealActive."; fi
+        sleep $SLEEP_INTERVAL
         DEAL_STATUS=$( lotus-miner storage-deals list -v | grep $DEAL_CID | tr -s ' ' | cut -d ' ' -f7 )
         _echo "DEAL_STATUS: $DEAL_STATUS"
     done
+
     LOTUS_GET_DEAL_CMD="lotus client get-deal $DEAL_CID"
     _echo "Querying lotus client deal status. Executing: $LOTUS_GET_DEAL_CMD"
-    $LOTUS_GET_DEAL_CMD
+    $LOTUS_GET_DEAL_CMD # shows "OnChain", and "Log": "deal activated",
+
     SINGULARITY_DEAL_STATUS_MD="singularity repl status -v $REPL_ID"
     _echo "Querying singularity client deal status. Executing: $SINGULARITY_DEAL_STATUS_MD"
-    $SINGULARITY_DEAL_STATUS_MD
+    $SINGULARITY_DEAL_STATUS_MD # somehow state remains in proposed... whats the refresh frequency of singularity ? retry later?
 }
 
 function test_miner_auto_import_script() {
@@ -566,7 +569,7 @@ function full_rebuild_test() {
 
     # singularity_test
     test_singularity
-    sleep 10
+    _echo "sleeping, for miner to receive deal..." && sleep 60
     test_miner_import_car
 }
 
@@ -576,7 +579,5 @@ function run() {
 }
 
 # Execute function from parameters
-_echo "which go..."
-which go
 $@
 _echo "Lotus Linux devnet test completed: $0"
