@@ -22,6 +22,8 @@ LOTUS_DAEMON_LOG=${LOTUS_SOURCE}lotus-daemon.log
 LOTUS_MINER_LOG=${LOTUS_SOURCE}lotus-miner.log
 SINGULARITY_OUT_CSV=`pwd`"/singularity-out.csv"
 
+# increase limits for Singularity
+ulimit -n 100000
 
 if [[ -z "$HOME" ]]; then
     echo "HOME undefined." 1>&2
@@ -281,7 +283,7 @@ function retrieve_wait() {
     done
 }
 
-function setup_singularity() {
+function install_singularity() {
     rm -rf $HOME/singularity
     rm -rf $HOME/.singularity
     _echo "## cloning singularity repo..."
@@ -301,9 +303,65 @@ function setup_singularity() {
     cd go-generate-car
     make
     mv ./generate-car /root/singularity/node_modules/.bin
-    echo "## Singularity installed. Now running singularity init and prep test..."
-    cd $HOME/singularity-integ-test/singularity
-    ./singularity-tests.sh # >> ../singularity-tests.log 2>&1 & .
+}
+
+function init_singularity() {
+    # Nuke pre-existing config and any crumbs
+    pkill -f 'node .*singularity daemon' || true
+    rm -rf $HOME/.singularity
+
+    # Initialize.
+    echo "Initializing Singularity..."
+    singularity init
+    ls $HOME/.singularity
+    echo "Setting up config for deal prep only."
+    cp $HOME/.singularity/default.toml $HOME/.singularity/default.toml.orig
+    cp $HOME/singularity-integ-test/singularity/my-singularity-config.toml $HOME/.singularity/default.toml
+    # Start daemon.
+    echo "Starting singularity daemon..."
+    nohup singularity daemon 2>&1 >> /var/log/singularity.log &
+    echo "Started singularity daemon."
+
+    # Wait for singularity daemon startup.
+    sleep 10 && singularity prep list
+
+    # Generate test data
+    echo "Preparing test data..."
+    DATASET_PATH=/tmp/source
+    OUT_DIR=/tmp/car
+    DATASET_NAME="test0000"
+    rm -rf $DATASET_PATH && mkdir -p $DATASET_PATH
+    rm -rf $OUT_DIR && mkdir -p $OUT_DIR
+    cp -r /root/singularity $DATASET_PATH
+
+    # Run data prep test
+    _echo "Running singularity install verification test..."
+    export SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_PATH $OUT_DIR"
+    _echo "executing command: $SINGULARITY_CMD"
+    $SINGULARITY_CMD
+
+    # Await prep completion
+    _echo "awaiting prep status completion."
+    sleep 5
+    PREP_STATUS="blank"
+    MAX_SLEEP_SECS=10
+    while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
+        MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - 1 ))
+        if [ $MAX_SLEEP_SECS -eq 0 ]; then _error "Timeout waiting for prep success status."; fi
+        sleep 1
+        PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
+        _echo "PREP_STATUS: $PREP_STATUS"
+    done
+
+    # Verify test result
+    export EXPECTED_CAR_COUNT=1
+    _echo "Verifying test output..."
+    _echo "listing of $OUT_DIR: "`ls -lh $OUT_DIR`
+    _echo "size of $OUT_DIR: "`du -sh $OUT_DIR`
+    export ACTUAL_CAR_COUNT=`find $OUT_DIR -type f | wc -l`
+    _echo "count of regular files in $OUT_DIR: $ACTUAL_CAR_COUNT"
+    if [ $ACTUAL_CAR_COUNT -ne $EXPECTED_CAR_COUNT ]; then _error "unexpected count of files: $ACTUAL_CAR_COUNT -ne $EXPECTED_CAR_COUNT"; fi
+    _echo "Singularity test completed."
 }
 
 function singularity_test() {
@@ -421,7 +479,9 @@ function test_retrieve_WIP() {
 }
 
 function full_rebuild_test() {
-    setup_singularity
+    install_singularity
+    init_singularity
+
     setup_ipfs
     start_ipfs
     rebuild
