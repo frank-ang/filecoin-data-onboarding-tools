@@ -21,7 +21,10 @@ LOTUS_SOURCE=$HOME/lotus/
 LOTUS_DAEMON_LOG=${LOTUS_SOURCE}lotus-daemon.log
 LOTUS_MINER_LOG=${LOTUS_SOURCE}lotus-miner.log
 SINGULARITY_OUT_CSV=`pwd`"/singularity-out.csv"
+export DATASET_PATH=/tmp/source
 export CAR_DIR=/tmp/car
+export RETRIEVE_CAR_DIR=/tmp/car-retrieve
+
 # set golang envars, because sourcing .bashrc appears not to work in userdata.
 export GOPATH=/root/go
 export GOBIN=$GOPATH/bin
@@ -155,8 +158,9 @@ function start_singularity() {
 }
 
 function stop_singularity() {
-    pkill -f 'node.*singularity'
-    pkill -f '.*mongod-x64-ubuntu'
+    pkill -f 'node.*singularity' || true
+    pkill -f '.*mongod-x64-ubuntu' || true
+    sleep 1
 }
 
 function setup_ipfs() {
@@ -197,7 +201,7 @@ function setup_wallets() {
     echo "export CLIENT_WALLET_ADDRESS=$CLIENT_WALLET_ADDRESS" >> $TEST_CONFIG_FILE
 
     _echo "Sending funds into client lotus wallet..."
-    lotus send --from "$SP_WALLET_ADDRESS" "$CLIENT_WALLET_ADDRESS" 1000
+    lotus send --from "$SP_WALLET_ADDRESS" "$CLIENT_WALLET_ADDRESS" 10000000
     sleep 2
     CLIENT_WALLET_BALANCE=`lotus wallet balance "$CLIENT_WALLET_ADDRESS" | cut -d' ' -f1`
     _echo "client lotus wallet address: $CLIENT_WALLET_ADDRESS, balance: $CLIENT_WALLET_BALANCE"
@@ -206,8 +210,6 @@ function setup_wallets() {
 function _prep_test_data() {
     # Generate test data
     _echo "Generating test data..."
-    export DATASET_PATH=/tmp/source
-    export CAR_DIR=/tmp/car
     export DATASET_NAME=`uuidgen | cut -d'-' -f1`
     echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
 
@@ -245,8 +247,6 @@ function client_lotus_deal() {
     _echo "Importing CAR into Lotus..."
     lotus client import --car $CAR_FILE
     sleep 2
-
-    export MINERID="t01000"
 
     QUERY_ASK_CMD="lotus client query-ask $MINERID"
     _echo "Executing: $QUERY_ASK_CMD"
@@ -316,18 +316,16 @@ function install_singularity() {
 }
 
 function init_singularity() {
-    # Nuke pre-existing config and any crumbs
-    pkill -f 'node .*singularity daemon' || true
+    stop_singularity
+    sleep 2
     rm -rf $HOME/.singularity
 
-    # Initialize.
     echo "Initializing Singularity..."
     singularity init
     ls $HOME/.singularity
     echo "Setting up config for deal prep only."
     cp $HOME/.singularity/default.toml $HOME/.singularity/default.toml.orig
     cp $HOME/singularity-integ-test/singularity/my-singularity-config.toml $HOME/.singularity/default.toml
-    # Start daemon.
     echo "Starting singularity daemon..."
     nohup singularity daemon 2>&1 >> /var/log/singularity.log &
     echo "Started singularity daemon."
@@ -337,9 +335,8 @@ function init_singularity() {
 
     # Generate test data
     echo "Preparing test data..."
-    DATASET_PATH=/tmp/source
     OUT_DIR=/tmp/car
-    DATASET_NAME="test0000"
+    DATASET_NAME="verify-test"
     rm -rf $DATASET_PATH && mkdir -p $DATASET_PATH
     rm -rf $OUT_DIR && mkdir -p $OUT_DIR
     cp -r /root/singularity $DATASET_PATH
@@ -374,7 +371,7 @@ function init_singularity() {
     _echo "Singularity test completed."
 }
 
-function singularity_test() {
+function singularity_test() { # deprecated??
     _echo "singularity_test starting..."
     . $TEST_CONFIG_FILE # set wallet addresses env variables.
     singularity prep list --json | jq -r '.[].name'
@@ -388,7 +385,6 @@ function singularity_test() {
     singularity prep list --json | jq -r '.[] | select(.name==env.DATASET_NAME) | ( .id, .name, .scanningStatus, .generationTotal, .generationCompleted )'
 
     _echo "Make deals to storage providers..."
-    export MINERID="t01000"
     CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
     START_DELAY_DAYS="0.041" # ~ <60 mins.
     DURATION_DAYS=180
@@ -419,18 +415,24 @@ function test_singularity() {
     generate_test_data
     test_singularity_prep
     test_singularity_repl
-    _echo "test_singularity verifying..."
+    _echo "test_singularity verify deals..."
+    sleep 10
     singularity repl list
     # Singularity bug. Does not support devnet block height. (workaround in DealReplicationWorker.ts)
     # error during repl status # deal rejected: invalid deal end epoch 3882897: cannot be more than 1555200 past current epoch 1007
     # singularity repl status -v 63771015987d840fafb37afa # TODO hardcoded REPLACE_WITH_REPL_ID
+    lotus client list-deals --show-failed -v  
     lotus-miner storage-deals list -v
     lotus-miner sectors list
+    _echo "sleeping, for miner to receive deal..." && sleep 60
+    test_miner_import_car
+    _echo "sleeping, although miner has sealed the deal..." && sleep 1
+    test_lotus_retrieve
     _echo "test_singularity completed."
 }
 
 function generate_test_data() {
-    echo "generate_test_data..."
+    _echo "Generating test data for dataset: $DATASET_NAME"
     export DATASET_NAME=`uuidgen | cut -d'-' -f1`
     export DATASET_SOURCE_DIR=/tmp/source/$DATASET_NAME
     rm -rf $DATASET_SOURCE_DIR && mkdir -p $DATASET_SOURCE_DIR
@@ -457,38 +459,46 @@ function test_singularity_prep() {
         PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
     done
     export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
+    echo "export DATA_CID=$DATA_CID" >> $TEST_CONFIG_FILE
     export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
+    echo "export PIECE_CID=$PIECE_CID" >> $TEST_CONFIG_FILE
     export CAR_FILE=`ls -tr $CAR_DIR/*.car | tail -1`
+    echo "export CAR_FILE=$CAR_FILE" >> $TEST_CONFIG_FILE
 }
 
 function test_singularity_repl() {
     _echo "Testing singularity replicate..."
     LOTUS_CLIENT_IMPORT_CAR_CMD="lotus client import --car $CAR_FILE"
-    _echo "Importing car into lotus: $LOTUS_CLIENT_IMPORT_CAR_CMD"
+    _echo "Executing command: $LOTUS_CLIENT_IMPORT_CAR_CMD"
     $LOTUS_CLIENT_IMPORT_CAR_CMD
     unset FULLNODE_API_INFO
     CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
     START_DELAY_DAYS=$(( $CURRENT_EPOCH / 2880 + 1 )) # 1 day floor.
-    echo "CURRENT_EPOCH: $CURRENT_EPOCH , START_DELAY_DAYS: $START_DELAY_DAYS"
+    _echo "CURRENT_EPOCH: $CURRENT_EPOCH , START_DELAY_DAYS: $START_DELAY_DAYS"
     DURATION_DAYS=180
     PRICE="953"
     REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
     _echo "Executing replication command: $REPL_CMD" 
     $REPL_CMD
+    sleep 1
+    export REPL_ID=$(singularity repl list | sed -n -r 's/^│[[:space:]]+[0-9]+[[:space:]]+│[[:space:]]*'\''([^'\'']*).*/\1/p' | tail -1)
+     _echo "looking up Singularity replication ID: $REPL_ID"
+    REPL_STATUS_JSON=$(singularity repl status -v $REPL_ID)
+    export DEAL_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dealCid')
+    export DATA_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dataCid') # already set by prep stage
+    export PIECE_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].pieceCid')
+    echo "export REPL_ID=$REPL_ID" >> $TEST_CONFIG_FILE
+    echo "export DEAL_CID=$DEAL_CID" >> $TEST_CONFIG_FILE
+    echo "export DATA_CID=$DATA_CID" >> $TEST_CONFIG_FILE
+    echo "export PIECE_CID=$PIECE_CID" >> $TEST_CONFIG_FILE
 }
 
 function test_miner_import_car() {
     . $TEST_CONFIG_FILE
     export CAR_DIR=/tmp/car/$DATASET_NAME
     export CAR_FILE=`ls -tr $CAR_DIR/*.car | tail -1`
-    # Tested this is working: lotus-miner storage-deals import-data <proposal CID> <file>
-    _echo "Importing car file. Typically, offline data transfer required."
-    # Hack to get PROPOSAL_CID from CLI table, not tested for repeating rows.
-    REPL_ID=$(singularity repl list | sed -n 's/^│    0    │ '\''\([^'\'']*\).*/\1/p')
-    DEAL_CID=$(singularity repl status -v $REPL_ID | jq -r '.deals[].dealCid')
-    # don't need this until retrieval test. DATA_CID=$(singularity repl status -v $REPL_ID | jq -r '.deals[].dataCid')
     IMPORT_CMD="lotus-miner storage-deals import-data $DEAL_CID $CAR_FILE"
-    _echo "executing: $IMPORT_CMD"
+    _echo "Importing car file into miner...executing: $IMPORT_CMD"
     $IMPORT_CMD
     _echo "CAR file imported. Awaiting miner sealing..."
     DEAL_STATUS="blank"
@@ -503,7 +513,7 @@ function test_miner_import_car() {
         _echo "DEAL_STATUS: $DEAL_STATUS"
     done
 
-    LOTUS_GET_DEAL_CMD="lotus client get-deal $DEAL_CID"
+    LOTUS_GET_DEAL_CMD="lotus client get-deal $DEAL_CID | "
     _echo "Querying lotus client deal status. Executing: $LOTUS_GET_DEAL_CMD"
     $LOTUS_GET_DEAL_CMD # shows "OnChain", and "Log": "deal activated",
 
@@ -524,9 +534,33 @@ function test_miner_auto_import_script() {
     $AUTO_IMPORT_SCRIPT $CAR_DIR $CLIENT_WALLET_ADDRESS
 }
 
-function test_retrieve_WIP() {
-    ## TODO function to install IPFS.
-    lotus client retrieve --car --provider t01000 $CID /root/singularity-integ-test/lotus/retrieve.out
+function test_lotus_retrieve() {
+    . $TEST_CONFIG_FILE
+    _echo "testing lotus retrieve for DATASET_NAME: $DATASET_NAME"
+    RETRIEVE_CAR_FILE="$RETRIEVE_CAR_DIR/$DATASET_NAME/retrieved.car"
+    rm -rf "$RETRIEVE_CAR_DIR/$DATASET_NAME"
+    mkdir -p "$RETRIEVE_CAR_DIR/$DATASET_NAME"
+    lotus_retrieve $DATA_CID $RETRIEVE_CAR_FILE
+    SOURCE_CAR_FILE="$CAR_DIR/$PIECE_CID.car"
+    DIFF_CMD="diff $RETRIEVE_CAR_FILE $SOURCE_CAR_FILE"
+    _echo "comparing retrieved against original: $DIFF_CMD" || _error "retrieved file differs from original"
+    $DIFF_CMD
+}
+
+function lotus_retrieve() {
+    DATA_CID=$1
+    RETRIEVE_CAR_FILE=$2
+    LOTUS_RETRIEVE_CMD="lotus client retrieve --car --provider $MINERID $DATA_CID $RETRIEVE_CAR_FILE"
+    _echo "executing command: $LOTUS_RETRIEVE_CMD"
+    $LOTUS_RETRIEVE_CMD
+}
+
+function setup_singularity_index() {
+    echo noop
+}
+
+function test_singularity_retrieve() {
+    echo noop
 }
 
 function full_rebuild_test() {
@@ -569,8 +603,6 @@ function full_rebuild_test() {
 
     # singularity_test
     test_singularity
-    _echo "sleeping, for miner to receive deal..." && sleep 60
-    test_miner_import_car
 }
 
 # Entry point.
