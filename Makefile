@@ -38,9 +38,9 @@ wait_delete_appliance:
 
 connect_verify:
 	ssh ubuntu@${AWS_APPLIANCE_IP} "grep 'EC2 instance inititalization COMPLETE' /var/log/cloud-init-output.log || exit 1" \
-	&& ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep 'PREP_STATUS: completed' /root/singularity-integ-test/singularity-tests.log || exit 1" \
-	&& ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep '## Building lotus' /root/singularity-integ-test/lotus-init-devnet.log || exit 1" \
-	&& ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep '## Lotus setup completed.' /root/singularity-integ-test/lotus-init-devnet.log || exit 1"
+	&& ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep 'PREP_STATUS: completed' /root/filecoin-data-onboarding-tools/singularity-tests.log || exit 1" \
+	&& ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep '## Building lotus' /root/filecoin-data-onboarding-tools/lotus-init-devnet.log || exit 1" \
+	&& ssh ubuntu@${AWS_APPLIANCE_IP} "sudo grep '## Lotus setup completed.' /root/filecoin-data-onboarding-tools/lotus-init-devnet.log || exit 1"
 	@echo "verification completed."
 
 connect:
@@ -49,7 +49,7 @@ connect:
 
 deploy_script:
 	scp lotus/setup-filecoin-tools.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/setup-filecoin-tools.sh
-	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/setup-filecoin-tools.sh /root/singularity-integ-test/lotus/"
+	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/setup-filecoin-tools.sh /root/filecoin-data-onboarding-tools/lotus/"
 
 connect_boost:
 	@echo "Connecting to boost browser UI at: ${AWS_APPLIANCE_IP}:3000"
