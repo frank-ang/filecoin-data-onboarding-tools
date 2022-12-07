@@ -48,8 +48,8 @@ connect:
 	ssh ubuntu@${AWS_APPLIANCE_IP}
 
 deploy_script:
-	scp lotus/lotus-init-devnet.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/lotus-init-devnet.sh
-	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/lotus-init-devnet.sh /root/singularity-integ-test/lotus/"
+	scp lotus/setup-filecoin-tools.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/setup-filecoin-tools.sh
+	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/setup-filecoin-tools.sh /root/singularity-integ-test/lotus/"
 
 connect_boost:
 	@echo "Connecting to boost browser UI at: ${AWS_APPLIANCE_IP}:3000"
