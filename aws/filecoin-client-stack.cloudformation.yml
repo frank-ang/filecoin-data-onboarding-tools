@@ -73,9 +73,10 @@ Parameters:
     Description: EC2 Instance Type
     Type: String
     # Season to taste
-    Default: c5.2xlarge
+    Default: r5.2xlarge
     AllowedValues:
       - c5.2xlarge
+      - c5.4xlarge
       - c5d.2xlarge
       - c5d.4xlarge
       - m5d.2xlarge

@@ -1,6 +1,6 @@
 # Filecoin Data Onboarding Tools
 
-Automates provisioning/deprovisioning of a Filecoin cloud appliance. This consists of an Ubuntu instance installed with Lotus,Lotus-miner, Boost, and Singularity.
+Automates provisioning/deprovisioning of a Filecoin cloud appliance. This consists of an Ubuntu instance in`stalled with Lotus,Lotus-miner, Boost, and Singularity.
 
 Currently configures for Devnet.
 
@@ -48,8 +48,35 @@ tail -f /var/log/setup-filecoin-tools.log
 ```
 Continue doing your dev work etc.
 
-4. Delete the appliance.
-Upon conclusion of testing, you should $ave on AWS charges by deleting the appliance.
+
+4. Stop/Start services.
+
+Lotus, lotus-miner, and singularity daemon.
+```
+./lotus/setup-filecoin-tools.sh restart_daemons
+./lotus/setup-filecoin-tools.sh _killall_daemons
+./lotus/setup-filecoin-tools.sh start_daemons
+```
+
+5. Stop/Start the appliance.
+
+Save on AWS EC2 charges. Please note that AWS will still charge for stopped EBS storage.
+```
+make stop_appliance
+make start_appliance
+```
+
+6. Delete the appliance.
+
+Upon conclusion of testing, please export any work and delete the appliance, to save on AW$ charges.
 ```
 make delete_appliance
+```
+
+## Miscellaneous
+
+Rebuild on-instance.
+
+```
+./lotus/setup-filecoin-tools.sh full_rebuild_test
 ```
