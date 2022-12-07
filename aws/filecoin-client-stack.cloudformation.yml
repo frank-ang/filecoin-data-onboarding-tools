@@ -73,9 +73,10 @@ Parameters:
     Description: EC2 Instance Type
     Type: String
     # Season to taste
-    Default: c5.2xlarge
+    Default: r5.2xlarge
     AllowedValues:
       - c5.2xlarge
+      - c5.4xlarge
       - c5d.2xlarge
       - c5d.4xlarge
       - m5d.2xlarge
@@ -139,15 +140,15 @@ Resources:
 
           echo "## Downloading Repo"
           cd $HOME
-          git clone https://github.com/frank-ang/singularity-integ-test.git
-          cd ./singularity-integ-test && git fetch && git switch test
+          git clone https://github.com/frank-ang/filecoin-data-onboarding-tools.git
+          cd ./filecoin-data-onboarding-tools && git fetch && git switch test
           
           echo "## Installing Ubuntu prereqs required by Filecoin client tools."
-          cd $HOME/singularity-integ-test/aws/
+          cd $HOME/filecoin-data-onboarding-tools/aws/
           ./filecoin-ubuntu-prereqs.sh run >> /var/log/filecoin-ubuntu-prereqs.log 2>&1
 
           echo "## Setting up Filecoin client tools (background)..."
-          cd $HOME/singularity-integ-test/lotus
+          cd $HOME/filecoin-data-onboarding-tools/lotus
           nohup ./setup-filecoin-tools.sh run >> /var/log/setup-filecoin-tools.log 2>&1 &
 
           # All done, signal success.

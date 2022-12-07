@@ -158,12 +158,14 @@ function start_singularity() {
 }
 
 function stop_singularity() {
+    _echo "stopping singularity..."
     pkill -f 'node.*singularity' || true
     pkill -f '.*mongod-x64-ubuntu' || true
     sleep 1
 }
 
 function setup_ipfs() {
+    _echo "setting up IPFS..."
     wget https://dist.ipfs.tech/kubo/v0.17.0/kubo_v0.17.0_linux-amd64.tar.gz
     tar -xvzf kubo_v0.17.0_linux-amd64.tar.gz
     cd kubo
@@ -174,10 +176,12 @@ function setup_ipfs() {
 }
 
 function start_ipfs() {
+    _echo "starting IPFS..."
     nohup ipfs daemon >> /var/log/ipfs.log 2>&1 &
 }
 
 function stop_ipfs() {
+    _echo "stopping IPFS..."
     ipfs shutdown
 }
 
@@ -300,7 +304,7 @@ function install_singularity() {
     cd $HOME
     git clone https://github.com/tech-greedy/singularity.git
     _echo "## deploying hacky patch to DealReplicationWorker.ts for devnet blockheight."
-    cp -f singularity-integ-test/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
+    cp -f filecoin-data-onboarding-tools/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
     _echo "## building singularity..."
     cd singularity
     npm ci
@@ -309,10 +313,11 @@ function install_singularity() {
     npx singularity -h
     _echo "Installing go-generate-car dependency..."
     cd $HOME
+    rm -rf go-generate-car
     git clone https://github.com/tech-greedy/go-generate-car.git
     cd go-generate-car
     make
-    mv ./generate-car /root/singularity/node_modules/.bin
+    mv -f ./generate-car /root/singularity/node_modules/.bin
 }
 
 function init_singularity() {
@@ -325,7 +330,7 @@ function init_singularity() {
     ls $HOME/.singularity
     echo "Setting up config for deal prep only."
     cp $HOME/.singularity/default.toml $HOME/.singularity/default.toml.orig
-    cp $HOME/singularity-integ-test/singularity/my-singularity-config.toml $HOME/.singularity/default.toml
+    cp $HOME/filecoin-data-onboarding-tools/singularity/my-singularity-config.toml $HOME/.singularity/default.toml
     echo "Starting singularity daemon..."
     nohup singularity daemon 2>&1 >> /var/log/singularity.log &
     echo "Started singularity daemon."
