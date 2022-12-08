@@ -48,8 +48,10 @@ connect:
 	ssh ubuntu@${AWS_APPLIANCE_IP}
 
 deploy_script:
-	scp lotus/setup-filecoin-tools.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/filecoin-tools-setup.sh
+	scp lotus/filecoin-tools-setup.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/
 	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/filecoin-tools-setup.sh /root/filecoin-data-onboarding-tools/lotus/"
+	scp lotus/filecoin-tools-tests.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/
+	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/filecoin-tools-tests.sh /root/filecoin-data-onboarding-tools/lotus/"
 
 connect_boost:
 	@echo "Connecting to boost browser UI at: ${AWS_APPLIANCE_IP}:3000"

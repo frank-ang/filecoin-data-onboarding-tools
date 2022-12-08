@@ -94,69 +94,9 @@ function retrieve_wait() {
     done
 }
 
-function singularity_test() { # deprecated??
-    _echo "singularity_test starting..."
-    . $TEST_CONFIG_FILE # set wallet addresses env variables.
-    singularity prep list --json | jq -r '.[].name'
-    _echo "DATASET_NAME: $DATASET_NAME"
-    # or, alternately # export DATASET_NAME=`singularity prep list --json | jq -r '.[].name' | grep -v test | head -1`
-    
-    singularity prep status --json $DATASET_NAME
-    # Wait for prep generation status to complete.
-    # TODO: singularity prep generation-status ?
-    singularity prep list --json | jq -r '.[] | select(.name==env.DATASET_NAME) | [ .id, .name ]'
-    singularity prep list --json | jq -r '.[] | select(.name==env.DATASET_NAME) | ( .id, .name, .scanningStatus, .generationTotal, .generationCompleted )'
-
-    _echo "Make deals to storage providers..."
-    CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
-    START_DELAY_DAYS="0.041" # ~ <60 mins.
-    DURATION_DAYS=180
-    echo "CURRENT_EPOCH: $CURRENT_EPOCH , START_DELAY_DAYS: $START_DELAY_DAYS , DURATION_DAYS: $DURATION_DAYS"
-
-    # Usage: singularity replication start [options] <datasetid> <storage-providers> <client> [# of replica]
-    PRICE="953" #"0.0000000005"
-    # TODO troubleshoot online deals first, 
-    # REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
-    ## troubleshooting. remove --start-delay
-    REPL_CMD="singularity repl start --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
-    _echo "Executing replication command: $REPL_CMD"
-    $REPL_CMD
-
-    _echo "sleeping a bit..." && sleep 30
-    _echo "listing singularity replications..."
-    singularity repl list
-    # singularity repl status -v REPLACE_WITH_REPL_ID
-
-    lotus-miner storage-deals list -v
-    lotus-miner sectors list
-    _echo "singularity_test completed."
-}
-
-function test_singularity() {
-    _echo "test_singularity starting..."
-    . $TEST_CONFIG_FILE
-    generate_test_data
-    test_singularity_prep
-    test_singularity_repl
-    _echo "test_singularity verify deals..."
-    sleep 10
-    singularity repl list
-    # Singularity bug. Does not support devnet block height. (workaround in DealReplicationWorker.ts)
-    # error during repl status # deal rejected: invalid deal end epoch 3882897: cannot be more than 1555200 past current epoch 1007
-    # singularity repl status -v 63771015987d840fafb37afa # TODO hardcoded REPLACE_WITH_REPL_ID
-    lotus client list-deals --show-failed -v  
-    lotus-miner storage-deals list -v
-    lotus-miner sectors list
-    _echo "sleeping, for miner to receive deal..." && sleep 60
-    test_miner_import_car
-    _echo "sleeping, although miner has sealed the deal..." && sleep 1
-    test_lotus_retrieve
-    _echo "test_singularity completed."
-}
-
 function generate_test_data() {
-    _echo "Generating test data for dataset: $DATASET_NAME"
     export DATASET_NAME=`uuidgen | cut -d'-' -f1`
+    _echo "Generating test data for dataset: $DATASET_NAME"
     export DATASET_SOURCE_DIR=/tmp/source/$DATASET_NAME
     rm -rf $DATASET_SOURCE_DIR && mkdir -p $DATASET_SOURCE_DIR
     DATA_FILE="$DATASET_SOURCE_DIR/$DATASET_NAME.dat"
@@ -181,6 +121,8 @@ function test_singularity_prep() {
         sleep 1
         PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
     done
+    export DATASET_ID=`singularity prep status --json $DATASET_NAME | jq -r '.id'`
+    echo "export DATASET_ID=$DATASET_ID" >> $TEST_CONFIG_FILE
     export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
     echo "export DATA_CID=$DATA_CID" >> $TEST_CONFIG_FILE
     export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
@@ -204,13 +146,14 @@ function test_singularity_repl() {
     _echo "Executing replication command: $REPL_CMD" 
     $REPL_CMD
     sleep 1
-    export REPL_ID=$(singularity repl list | sed -n -r 's/^│[[:space:]]+[0-9]+[[:space:]]+│[[:space:]]*'\''([^'\'']*).*/\1/p' | tail -1)
-     _echo "looking up Singularity replication ID: $REPL_ID"
+    export REPL_ID=$(singularity repl list | grep $DATASET_ID | sed -n -r 's/^│[[:space:]]+[0-9]+[[:space:]]+│[[:space:]]*'\''([^'\'']*).*/\1/p')
+    _echo "looking up singularity replication ID: $REPL_ID , for dataset ID: $DATASET_ID"
     REPL_STATUS_JSON=$(singularity repl status -v $REPL_ID)
     export DEAL_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dealCid')
-    export DATA_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dataCid') # already set by prep stage
+    export DATA_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dataCid')
     export PIECE_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].pieceCid')
     echo "export REPL_ID=$REPL_ID" >> $TEST_CONFIG_FILE
+    # TODO: handle the case where 1 replication has many deals.
     echo "export DEAL_CID=$DEAL_CID" >> $TEST_CONFIG_FILE
     echo "export DATA_CID=$DATA_CID" >> $TEST_CONFIG_FILE
     echo "export PIECE_CID=$PIECE_CID" >> $TEST_CONFIG_FILE
@@ -245,7 +188,7 @@ function test_miner_import_car() {
     $SINGULARITY_DEAL_STATUS_MD # somehow state remains in proposed... whats the refresh frequency of singularity ? retry later?
 }
 
-function test_miner_auto_import_script() {
+function test_miner_auto_import_script_DRAFT() {
     MARKETS_API_INFO="SETME"
     MINER_API_INFO="SETME"
     # Which utility to use?: singularity-import
@@ -279,9 +222,35 @@ function lotus_retrieve() {
 }
 
 function setup_singularity_index() {
-    echo noop
+    echo "Setting up Singularity index..."
+    INDEX_MAX_LINKS=1000
+    INDEX_MAX_NODES=100
+    singularity index create --max-links $INDEX_MAX_LINKS --max-nodes $INDEX_MAX_NODES $DATASET_NAME
+
 }
 
 function test_singularity_retrieve() {
     echo noop
+}
+
+function test_singularity() {
+    _echo "test_singularity starting..."
+    . $TEST_CONFIG_FILE
+    generate_test_data
+    test_singularity_prep
+    test_singularity_repl
+    _echo "test_singularity verify deals..."
+    sleep 10
+    singularity repl list
+    # Singularity bug. Does not support devnet block height. (workaround in DealReplicationWorker.ts)
+    # error during repl status # deal rejected: invalid deal end epoch 3882897: cannot be more than 1555200 past current epoch 1007
+    # singularity repl status -v 63771015987d840fafb37afa # TODO hardcoded REPLACE_WITH_REPL_ID
+    lotus client list-deals --show-failed -v
+    lotus-miner storage-deals list -v
+    lotus-miner sectors list
+    _echo "sleeping, for miner to receive deal..." && sleep 60
+    test_miner_import_car
+    sleep 1
+    test_lotus_retrieve
+    _echo "test_singularity completed."
 }

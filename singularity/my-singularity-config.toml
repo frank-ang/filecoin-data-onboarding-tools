@@ -49,7 +49,7 @@ ipfs_http = "http://localhost:5001"
 
 [ipfs]
 # Whether to start a built-in IPFS daemon
-enabled = true
+enabled = false
 
 [http_hosting_service]
 enabled = false

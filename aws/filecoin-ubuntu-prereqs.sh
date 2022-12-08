@@ -5,10 +5,9 @@
 
 function install_dependencies() {
     echo "## Installing Dependencies..."
-    cd $HOME # assumed as /root
     apt install -y git openssl gcc rsync make jq unzip nfs-common
     apt install -y software-properties-common
-    apt install -y sysstat iotop
+    apt install -y sysstat iotop net-tools # handy tools.
 }
 
 function install_node() {
@@ -52,6 +51,7 @@ function install_golang() {
 
 function run() {
     echo "running script $0"
+    cd $HOME # assumed as /root
     install_dependencies
     install_node
     install_golang

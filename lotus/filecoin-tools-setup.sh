@@ -38,9 +38,9 @@ export MINERID="t01000"
 
 . "$ROOT_SCRIPT_PATH/lotus/filecoin-tools-tests.sh" # import test functions.
 
-function rebuild() {
+function build_lotus() {
     _echo "Rebuilding from source..."
-    _killall_daemons
+    stop_daemons
 
     _echo "## Installing prereqs..."
     apt install -y mesa-opencl-icd ocl-icd-opencl-dev gcc git bzr jq pkg-config curl clang build-essential hwloc libhwloc-dev wget && sudo apt upgrade -y
@@ -66,7 +66,7 @@ function rebuild() {
 
 function init_daemons() {
     _echo "Initializing Daemons..."
-    _killall_daemons
+    stop_daemons
     rm -rf $LOTUS_PATH
     rm -rf $LOTUS_MINER_PATH
     rm -rf ~/.genesis-sectors
@@ -101,7 +101,7 @@ function deploy_miner_config() {
 function restart_daemons() {
     _echo "restarting daemons..."
     _echo "halting any existing daemons..."
-    _killall_daemons
+    stop_daemons
     sleep 10
     start_daemons
     sleep 10
@@ -109,15 +109,15 @@ function restart_daemons() {
 }
 
 function start_daemons() {
-    _echo "Starting lotus daemons..."
+    start_ipfs
+    _echo "Starting lotus node..."
     cd $LOTUS_SOURCE
     nohup lotus daemon >> /var/log/lotus-daemon.log 2>&1 &
     time _waitLotusStartup
-    _echo "Lotus node started."
+    _echo "lotus node started. starting lotus miner..."
     nohup lotus-miner run --nosync >> /var/log/lotus-miner.log 2>&1 &
     lotus-miner wait-api --timeout 600s
-    _echo "Lotus miner started."
-    start_ipfs || true
+    _echo "lotus miner started."
     start_singularity
 }
 
@@ -127,7 +127,7 @@ function _waitLotusStartup() {
     lotus wait-api --timeout $t
 }
 
-function _killall_daemons() {
+function stop_daemons() {
     _echo "Killing all daemons..."
     lotus-miner stop || true
     lotus daemon stop || true
@@ -277,7 +277,7 @@ function install_singularity() {
     npm ci
     npm run build
     npm link
-    npx singularity -h
+    npx singularity -V
     _echo "Installing go-generate-car dependency..."
     cd $HOME
     rm -rf go-generate-car
@@ -287,39 +287,17 @@ function install_singularity() {
     mv -f ./generate-car /root/singularity/node_modules/.bin
 }
 
-function init_singularity() {
-    stop_singularity
-    sleep 2
-    rm -rf $HOME/.singularity
-
-    echo "Initializing Singularity..."
-    singularity init
-    ls $HOME/.singularity
-    echo "Setting up config for deal prep only."
-    cp $HOME/.singularity/default.toml $HOME/.singularity/default.toml.orig
-    cp $HOME/filecoin-data-onboarding-tools/singularity/my-singularity-config.toml $HOME/.singularity/default.toml
-    echo "Starting singularity daemon..."
-    nohup singularity daemon 2>&1 >> /var/log/singularity.log &
-    echo "Started singularity daemon."
-
-    # Wait for singularity daemon startup.
-    sleep 10 && singularity prep list
-
+function verify_singularity_installation_DEPRECATED() {
+    _echo "verifying singularity installation, running prep test..."
     # Generate test data
-    echo "Preparing test data..."
     OUT_DIR=/tmp/car
     DATASET_NAME="verify-test"
     rm -rf $DATASET_PATH && mkdir -p $DATASET_PATH
     rm -rf $OUT_DIR && mkdir -p $OUT_DIR
     cp -r /root/singularity $DATASET_PATH
-
-    # Run data prep test
-    _echo "Running singularity install verification test..."
     export SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_PATH $OUT_DIR"
-    _echo "executing command: $SINGULARITY_CMD"
+    _echo "verifying singularity install, executing test command: $SINGULARITY_CMD"
     $SINGULARITY_CMD
-
-    # Await prep completion
     _echo "awaiting prep status completion."
     sleep 5
     PREP_STATUS="blank"
@@ -331,28 +309,51 @@ function init_singularity() {
         PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
         _echo "PREP_STATUS: $PREP_STATUS"
     done
-
-    # Verify test result
     export EXPECTED_CAR_COUNT=1
     _echo "Verifying test output..."
-    _echo "listing of $OUT_DIR: "`ls -lh $OUT_DIR`
-    _echo "size of $OUT_DIR: "`du -sh $OUT_DIR`
     export ACTUAL_CAR_COUNT=`find $OUT_DIR -type f | wc -l`
     _echo "count of regular files in $OUT_DIR: $ACTUAL_CAR_COUNT"
     if [ $ACTUAL_CAR_COUNT -ne $EXPECTED_CAR_COUNT ]; then _error "unexpected count of files: $ACTUAL_CAR_COUNT -ne $EXPECTED_CAR_COUNT"; fi
     _echo "Singularity test completed."
 }
 
-function full_rebuild_test() {
-    install_singularity
-    init_singularity
+function verify_singularity_installation() {
+    _echo "verifying singularity installation, running prep test..."
+    generate_test_data
+    test_singularity_prep
+}
+
+function init_singularity() {
+    stop_singularity
+    sleep 2
+    rm -rf $HOME/.singularity
+    echo "Initializing Singularity..."
+    singularity init
+    ls $HOME/.singularity
+    echo "Setting up config for deal prep only."
+    cp $HOME/.singularity/default.toml $HOME/.singularity/default.toml.orig
+    cp $HOME/filecoin-data-onboarding-tools/singularity/my-singularity-config.toml $HOME/.singularity/default.toml
+    #echo "Starting singularity daemon..."
+    #nohup singularity daemon 2>&1 >> /var/log/singularity.log &
+    #echo "Started singularity daemon."
+    # Wait for singularity daemon startup.
+    #sleep 10 && singularity prep list
+}
+
+function full_build_test() {
 
     setup_ipfs
     start_ipfs
-    rebuild
+
+    install_singularity
+    init_singularity
+    start_singularity
+    verify_singularity_installation
+
+    build_lotus
     init_daemons && sleep 10
 
-    _killall_daemons && sleep 2
+    stop_daemons && sleep 2
     deploy_miner_config
     restart_daemons && sleep 2
 
@@ -381,15 +382,13 @@ function full_rebuild_test() {
     _echo "comparing source file with retrieved file."
     diff -r /tmp/source `pwd`/retrieved.car.gitignore && _echo "comparison succeeded."
 
-    # singularity_test
     test_singularity
 }
 
 # Entry point.
 function run() {
-    full_rebuild_test
+    full_build_test
 }
 
 # Execute function from parameters
 $@
-_echo "Lotus Linux devnet test completed: $0"
