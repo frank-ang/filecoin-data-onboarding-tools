@@ -44,7 +44,7 @@ make connect
 ```
 From here, you can monitor the completion of install and test scripts.
 ```
-tail -f /var/log/setup-filecoin-tools.log
+tail -f /var/log/filecoin-tools-setup.log
 ```
 Continue doing your dev work etc.
 
@@ -53,9 +53,9 @@ Continue doing your dev work etc.
 
 Lotus, lotus-miner, and singularity daemon.
 ```
-./lotus/setup-filecoin-tools.sh restart_daemons
-./lotus/setup-filecoin-tools.sh _killall_daemons
-./lotus/setup-filecoin-tools.sh start_daemons
+./lotus/filecoin-tools-setup.sh restart_daemons
+./lotus/filecoin-tools-setup.sh killall_daemons
+./lotus/filecoin-tools-setup.sh start_daemons
 ```
 
 5. Stop/Start the appliance.

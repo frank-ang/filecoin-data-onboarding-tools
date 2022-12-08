@@ -34,12 +34,9 @@ export NVM_DIR="$HOME/.nvm"
 . "$NVM_DIR/bash_completion"
 export MINERID="t01000"
 
-# import common functions.
-. "$ROOT_SCRIPT_PATH/lotus/filecoin-tools-common.sh"
+. "$ROOT_SCRIPT_PATH/lotus/filecoin-tools-common.sh" # import common functions.
 
-# import test functions.
-. "$ROOT_SCRIPT_PATH/lotus/filecoin-tools-tests.sh"
-
+. "$ROOT_SCRIPT_PATH/lotus/filecoin-tools-tests.sh" # import test functions.
 
 function rebuild() {
     _echo "Rebuilding from source..."

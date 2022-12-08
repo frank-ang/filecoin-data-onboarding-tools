@@ -6,7 +6,7 @@
 # Based on: 
 # https://lotus.filecoin.io/lotus/install/linux/#building-from-source
 
-. "$ROOT_SCRIPT_PATH/lotus/setup-common.sh" # import common functions.
+. "$ROOT_SCRIPT_PATH/lotus/filecoin-tools-common.sh" # import common functions.
 
 function _prep_test_data() {
     # Generate test data
