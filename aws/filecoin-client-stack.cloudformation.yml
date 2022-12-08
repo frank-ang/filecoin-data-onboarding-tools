@@ -149,7 +149,7 @@ Resources:
 
           echo "## Setting up Filecoin client tools (background)..."
           cd $HOME/filecoin-data-onboarding-tools/lotus
-          nohup ./setup-filecoin-tools.sh run >> /var/log/setup-filecoin-tools.log 2>&1 &
+          nohup ./filecoin-tools-setup.sh run >> /var/log/filecoin-tools-setup.log 2>&1 &
 
           # All done, signal success.
           echo "## Signaling successful to CloudFormation."

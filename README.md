@@ -24,10 +24,10 @@ Currently supports Amazon Web Services only. Infra-as-code using AWS CloudFormat
 
 1. Configure
 
+On a workstation terminal (tested on MacOS), in the repo root, create a ```config.mk.gitignore``` file based on the template. Configure to suit your AWS cloud environment.
 ```
 cp config.mk config.mk.gitignore
 ```
-Edit the file to suit your AWS cloud environment.
 
 2. Create an appliance on AWS.
 
@@ -39,23 +39,24 @@ The stack creation should complete in under 2 mins. Note the Lotus tools and tes
 
 3. Connect to the appliance over SSH.
 
+Connects over SSH.
 ```
 make connect
 ```
-From here, you can monitor the completion of install and test scripts.
-```
-tail -f /var/log/setup-filecoin-tools.log
-```
-Continue doing your dev work etc.
 
+Monitor the tools setup and test log.
+```
+tail -f /var/log/filecoin-tools-setup.log
+```
+Once the log indicates test completed, the environment is ready for dev/test.
 
 4. Stop/Start services.
 
-Lotus, lotus-miner, and singularity daemon.
+Control lotus, lotus-miner, and singularity daemons.
 ```
-./lotus/setup-filecoin-tools.sh restart_daemons
-./lotus/setup-filecoin-tools.sh _killall_daemons
-./lotus/setup-filecoin-tools.sh start_daemons
+./lotus/filecoin-tools-setup.sh stop_daemons
+./lotus/filecoin-tools-setup.sh start_daemons
+./lotus/filecoin-tools-setup.sh restart_daemons
 ```
 
 5. Stop/Start the appliance.
@@ -75,8 +76,7 @@ make delete_appliance
 
 ## Miscellaneous
 
-Rebuild on-instance.
-
+* Full rebuild on the running Linux instance.
 ```
 ./lotus/setup-filecoin-tools.sh full_rebuild_test
 ```
