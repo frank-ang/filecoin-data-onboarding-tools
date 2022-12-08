@@ -3,8 +3,6 @@
 ## build, initialize, and run lotus daemon and lotus miner.
 
 set -e
-# $HOME/.lotusDevnetTest/
-# $HOME/.lotusminerDevnetTest/
 export LOTUS_PATH=$HOME/.lotus/
 export LOTUS_MINER_PATH=$HOME/.lotusminer/
 export LOTUS_SKIP_GENESIS_CHECK=_yes_
@@ -59,7 +57,7 @@ function rebuild() {
     make clean
     time make 2k
     date -u
-    _echo "Installing... user input prompt..."
+    _echo "Installing... requires user input prompt..."
     sudo make install # Prompts for user interactive input.
     date -u
 }
@@ -70,7 +68,7 @@ function init_daemons() {
     rm -rf $LOTUS_PATH
     rm -rf $LOTUS_MINER_PATH
     rm -rf ~/.genesis-sectors
-    cd $LOTUS_SOURCE && _echo "Fetching parameters..." #
+    cd $LOTUS_SOURCE && _echo "Fetching parameters..."
     time ./lotus fetch-params 2048
     _echo "Pre-seal some sectors for the genesis block..."
     time ./lotus-seed pre-seal --sector-size 2KiB --num-sectors 2
