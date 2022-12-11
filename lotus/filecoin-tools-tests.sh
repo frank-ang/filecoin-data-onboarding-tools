@@ -221,16 +221,54 @@ function lotus_retrieve() {
     $LOTUS_RETRIEVE_CMD
 }
 
+function test_singularity_retrieval_suite() {
+    . $TEST_CONFIG_FILE
+    setup_singularity_index
+    update_dns_txt_record_route53
+    test_singularity_retrieve
+}
+
 function setup_singularity_index() {
-    echo "Setting up Singularity index..."
     INDEX_MAX_LINKS=1000
     INDEX_MAX_NODES=100
-    singularity index create --max-links $INDEX_MAX_LINKS --max-nodes $INDEX_MAX_NODES $DATASET_NAME
+    INDEX_CREATE_CMD="singularity index create --max-links $INDEX_MAX_LINKS --max-nodes $INDEX_MAX_NODES $DATASET_NAME"
+    _echo "Setting up Singularity index. Executing: $INDEX_CREATE_CMD"
+    INDEX_CREATE_CMD_OUT=$($INDEX_CREATE_CMD)
+    _echo "Index create output: $INDEX_CREATE_CMD_OUT"
+    #export DNSLINK_TXT_RECORD=$(echo $INDEX_CREATE_CMD_OUT | sed -n -r 's/^.+("dnslink=.*$)/\1/p' | tr -d '"')
+    #echo "DNSLink TXT record to be updated into DNS: $DNSLINK_TXT_RECORD"
+    export INDEX_ROOT_IPFS=$(echo $INDEX_CREATE_CMD_OUT | sed -n -r 's/^.+"dnslink=(.*$)/\1/p' | tr -d '"')
+    _echo "INDEX_ROOT_CID=$INDEX_ROOT_IPFS"
+    echo "export INDEX_ROOT_CID=$INDEX_ROOT_IPFS" >> $TEST_CONFIG_FILE
+}
 
+function update_dns_txt_record_route53() {
+    # Turns out we can simply use the IPFS INDEX CID as root, instead of messing with DNSLINK or EC2 instance IAM permissions.
+    DNSLINK_TXT_RECORD="dnslink=$INDEX_ROOT_IPFS"
+    RRSET_JSON_FILE_TEMPLATE="$ROOT_SCRIPT_PATH/aws/dnslink_txt_record.template.json"
+    RRSET_JSON_FILE="$ROOT_SCRIPT_PATH/aws/dnslink_txt_record.json.gitignore"
+    DOMAIN_NAME="frankang.com." # TODO Set this in a config file.
+    TXT_RECORD_NAME="_dnslink.$DOMAIN_NAME"
+    HOSTED_ZONE_ID=`aws route53 list-hosted-zones | jq -r ".HostedZones[] | select(.Name==\"$DOMAIN_NAME\") | .Id"`
+    _echo "domain name: $DOMAIN_NAME , hosted zone id: $HOSTED_ZONE_ID"
+    DNSLINK_TXT_RECORD_OLD=$(aws route53 list-resource-record-sets --hosted-zone-id $HOSTED_ZONE_ID | jq -r ".ResourceRecordSets[] | select(.Name == \"$TXT_RECORD_NAME\") | .ResourceRecords[].Value")
+    _echo "Current DNSLink TXT record: $DNSLINK_TXT_RECORD_OLD"
+    _echo "Setting route53 update file with new DNSLINK TXT record: $DNSLINK_TXT_RECORD"
+    cp -f $RRSET_JSON_FILE_TEMPLATE $RRSET_JSON_FILE
+    sed -i -e "s/DOMAIN_NAME_REPLACE_ME/$TXT_RECORD_NAME/g" $RRSET_JSON_FILE
+    sed -i -e "s|DNSLINK_TXT_RECORD_REPLACE_ME|$DNSLINK_TXT_RECORD|g" $RRSET_JSON_FILE
+    ROUTE53_UPDATE_CMD="aws route53 change-resource-record-sets --hosted-zone-id $HOSTED_ZONE_ID --change-batch file://$RRSET_JSON_FILE"
+    cat $RRSET_JSON_FILE
+    _echo "Upserting DNSLink record on Route53, command: $ROUTE53_UPDATE_CMD" 
+    $ROUTE53_UPDATE_CMD
+    QUERY_DNS_TXT_RECORD_CMD="dig +short TXT $TXT_RECORD_NAME"
+    _echo "DNS should update after TTL expiry. You can verify with command: $QUERY_DNS_TXT_RECORD_CMD"
 }
 
 function test_singularity_retrieve() {
-    echo noop
+    singularity-retrieve ls -v singularity:/$INDEX_ROOT_IPFS/
+    singularity-retrieve ls -v singularity:/$INDEX_ROOT_IPFS/b68ce6c6.dat
+    singularity-retrieve cp -p $MINERID singularity:/$INDEX_ROOT_IPFS/b68ce6c6.dat .
 }
 
 function test_singularity() {
@@ -252,5 +290,9 @@ function test_singularity() {
     test_miner_import_car
     sleep 1
     test_lotus_retrieve
+
+    setup_singularity_index
+    test_singularity_retrieve
+
     _echo "test_singularity completed."
 }

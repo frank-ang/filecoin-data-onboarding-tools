@@ -1,0 +1,18 @@
+{
+    "Comment": "Upsert Route53 DNS TXT record for DNSLink",
+    "Changes": [
+      {
+        "Action": "UPSERT",
+        "ResourceRecordSet": {
+          "Name": "DOMAIN_NAME_REPLACE_ME",
+          "Type": "TXT",
+          "TTL": 300,
+          "ResourceRecords": [
+            {
+              "Value": "\"DNSLINK_TXT_RECORD_REPLACE_ME\""
+            }
+          ]
+        }
+      }
+    ]
+}

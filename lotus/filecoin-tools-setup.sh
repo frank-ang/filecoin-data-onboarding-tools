@@ -113,7 +113,7 @@ function start_daemons() {
     _echo "Starting lotus node..."
     cd $LOTUS_SOURCE
     nohup lotus daemon >> /var/log/lotus-daemon.log 2>&1 &
-    time _waitLotusStartup
+    _waitLotusStartup
     _echo "lotus node started. starting lotus miner..."
     nohup lotus-miner run --nosync >> /var/log/lotus-miner.log 2>&1 &
     lotus-miner wait-api --timeout 600s
@@ -139,8 +139,9 @@ function start_singularity() {
     _echo "Starting singularity daemon..."
     nohup singularity daemon >> /var/log/singularity.log 2>&1 &
     _echo "Awaiting singularity start..."
-    timeout 1m bash -c 'until singularity prep list; do sleep 10; done'
-    timeout 30s bash -c 'until singularity repl list; do sleep 10; done'
+    sleep 10
+    timeout 1m bash -c 'until singularity prep list; do sleep 5; done'
+    timeout 30s bash -c 'until singularity repl list; do sleep 5; done'
     _echo "Singularity started."
 }
 
@@ -285,36 +286,6 @@ function install_singularity() {
     cd go-generate-car
     make
     mv -f ./generate-car /root/singularity/node_modules/.bin
-}
-
-function verify_singularity_installation_DEPRECATED() {
-    _echo "verifying singularity installation, running prep test..."
-    # Generate test data
-    OUT_DIR=/tmp/car
-    DATASET_NAME="verify-test"
-    rm -rf $DATASET_PATH && mkdir -p $DATASET_PATH
-    rm -rf $OUT_DIR && mkdir -p $OUT_DIR
-    cp -r /root/singularity $DATASET_PATH
-    export SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_PATH $OUT_DIR"
-    _echo "verifying singularity install, executing test command: $SINGULARITY_CMD"
-    $SINGULARITY_CMD
-    _echo "awaiting prep status completion."
-    sleep 5
-    PREP_STATUS="blank"
-    MAX_SLEEP_SECS=10
-    while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
-        MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - 1 ))
-        if [ $MAX_SLEEP_SECS -eq 0 ]; then _error "Timeout waiting for prep success status."; fi
-        sleep 1
-        PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
-        _echo "PREP_STATUS: $PREP_STATUS"
-    done
-    export EXPECTED_CAR_COUNT=1
-    _echo "Verifying test output..."
-    export ACTUAL_CAR_COUNT=`find $OUT_DIR -type f | wc -l`
-    _echo "count of regular files in $OUT_DIR: $ACTUAL_CAR_COUNT"
-    if [ $ACTUAL_CAR_COUNT -ne $EXPECTED_CAR_COUNT ]; then _error "unexpected count of files: $ACTUAL_CAR_COUNT -ne $EXPECTED_CAR_COUNT"; fi
-    _echo "Singularity test completed."
 }
 
 function verify_singularity_installation() {
