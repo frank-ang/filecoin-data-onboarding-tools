@@ -1,7 +1,9 @@
 #!/bin/bash
+# Main install/configure script.
+# Also, use this script to invoke test functions.
 # Run as root.
 # E.g. via nohup or tmux:
-#         ./lotus-init-devnet.sh full_rebuild_test > ./full_rebuild_test.out 2>&1 &
+#         ./filecoin-tools-setup.sh full_rebuild_test >> ./full_rebuild_test.out 2>&1 &
 # Build Lotus devnet from source, configure, run devnet
 # Based on: 
 # https://lotus.filecoin.io/lotus/install/linux/#building-from-source
@@ -24,19 +26,20 @@ export DATASET_PATH=/tmp/source
 export CAR_DIR=/tmp/car
 export RETRIEVE_CAR_DIR=/tmp/car-retrieve
 
-# set golang envars, because sourcing .bashrc appears not to work in userdata.
+# set golang env vars, because sourcing .bashrc appears not to work in userdata.
 export GOPATH=/root/go
 export GOBIN=$GOPATH/bin
 export GOROOT=/usr/local/go
 export PATH=$PATH:$GOPATH/bin:$GOROOT/bin
+
+# set NVM env vars for Singularity
 export NVM_DIR="$HOME/.nvm"
 . "$NVM_DIR/nvm.sh"
 . "$NVM_DIR/bash_completion"
 export MINERID="t01000"
 
-. "$ROOT_SCRIPT_PATH/lotus/filecoin-tools-common.sh" # import common functions.
-
-. "$ROOT_SCRIPT_PATH/lotus/filecoin-tools-tests.sh" # import test functions.
+. $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
+. $(dirname $(realpath $0))"/filecoin-tools-tests.sh" # import test functions.
 
 function build_lotus() {
     _echo "Rebuilding from source..."
@@ -58,10 +61,9 @@ function build_lotus() {
     git checkout releases
     make clean
     time make 2k
-    date -u
     _echo "## Installing lotus..."
     make install
-    date -u
+    _echo "## Lotus installed complete. Lotus version: "`lotus --version`
 }
 
 function init_daemons() {
@@ -139,7 +141,7 @@ function start_singularity() {
     _echo "Starting singularity daemon..."
     nohup singularity daemon >> /var/log/singularity.log 2>&1 &
     _echo "Awaiting singularity start..."
-    sleep 10
+    sleep 12
     timeout 1m bash -c 'until singularity prep list; do sleep 5; done'
     timeout 30s bash -c 'until singularity repl list; do sleep 5; done'
     _echo "Singularity started."
@@ -304,11 +306,6 @@ function init_singularity() {
     echo "Setting up config for deal prep only."
     cp $HOME/.singularity/default.toml $HOME/.singularity/default.toml.orig
     cp $HOME/filecoin-data-onboarding-tools/singularity/my-singularity-config.toml $HOME/.singularity/default.toml
-    #echo "Starting singularity daemon..."
-    #nohup singularity daemon 2>&1 >> /var/log/singularity.log &
-    #echo "Started singularity daemon."
-    # Wait for singularity daemon startup.
-    #sleep 10 && singularity prep list
 }
 
 function full_build_test() {
@@ -362,4 +359,5 @@ function run() {
 }
 
 # Execute function from parameters
+# cd $HOME
 $@

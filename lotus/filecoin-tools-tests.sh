@@ -6,7 +6,7 @@
 # Based on: 
 # https://lotus.filecoin.io/lotus/install/linux/#building-from-source
 
-. "$ROOT_SCRIPT_PATH/lotus/filecoin-tools-common.sh" # import common functions.
+. $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
 
 function _prep_test_data() {
     # Generate test data
@@ -221,13 +221,6 @@ function lotus_retrieve() {
     $LOTUS_RETRIEVE_CMD
 }
 
-function test_singularity_retrieval_suite() {
-    . $TEST_CONFIG_FILE
-    setup_singularity_index
-    update_dns_txt_record_route53
-    test_singularity_retrieve
-}
-
 function setup_singularity_index() {
     INDEX_MAX_LINKS=1000
     INDEX_MAX_NODES=100
@@ -266,9 +259,23 @@ function update_dns_txt_record_route53() {
 }
 
 function test_singularity_retrieve() {
-    singularity-retrieve ls -v singularity:/$INDEX_ROOT_IPFS/
-    singularity-retrieve ls -v singularity:/$INDEX_ROOT_IPFS/b68ce6c6.dat
-    singularity-retrieve cp -p $MINERID singularity:/$INDEX_ROOT_IPFS/b68ce6c6.dat .
+    setup_singularity_index
+    #update_dns_txt_record_route53
+    _exec "singularity-retrieve ls -v singularity:/$INDEX_ROOT_IPFS/"
+    _exec "singularity-retrieve ls -v singularity:/$INDEX_ROOT_IPFS/$DATASET_NAME.dat"
+    _exec "singularity-retrieve cp -p $MINERID singularity:/$INDEX_ROOT_IPFS/$DATASET_NAME.dat ."
+    _exec "diff ./$DATASET_NAME.dat $DATASET_PATH/$DATASET_NAME.dat"
+}
+
+function test_singularity_retrieve_standalone() {
+    . $TEST_CONFIG_FILE
+    test_singularity_retrieve
+}
+
+function _exec() {
+    CMD=$@
+    _echo "executing: $CMD"
+    $CMD
 }
 
 function test_singularity() {
@@ -282,7 +289,7 @@ function test_singularity() {
     singularity repl list
     # Singularity bug. Does not support devnet block height. (workaround in DealReplicationWorker.ts)
     # error during repl status # deal rejected: invalid deal end epoch 3882897: cannot be more than 1555200 past current epoch 1007
-    # singularity repl status -v 63771015987d840fafb37afa # TODO hardcoded REPLACE_WITH_REPL_ID
+    # singularity repl status -v REPLACE_WITH_REPL_ID
     lotus client list-deals --show-failed -v
     lotus-miner storage-deals list -v
     lotus-miner sectors list
@@ -290,8 +297,6 @@ function test_singularity() {
     test_miner_import_car
     sleep 1
     test_lotus_retrieve
-
-    setup_singularity_index
     test_singularity_retrieve
 
     _echo "test_singularity completed."
