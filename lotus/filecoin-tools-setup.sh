@@ -203,70 +203,6 @@ function setup_wallets() {
     _echo "client lotus wallet address: $CLIENT_WALLET_ADDRESS, balance: $CLIENT_WALLET_BALANCE"
 }
 
-function _prep_test_data() {
-    # Generate test data
-    _echo "Generating test data..."
-    export DATASET_NAME=`uuidgen | cut -d'-' -f1`
-    echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
-
-    rm -rf $CAR_DIR && mkdir -p $CAR_DIR
-    rm -rf $DATASET_PATH && mkdir -p $DATASET_PATH
-    dd if=/dev/urandom of="$DATASET_PATH/$DATASET_NAME.dat" bs=1024 count=1 iflag=fullblock
-    export SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_PATH $CAR_DIR"
-    _echo "Preparing data via command: $SINGULARITY_CMD"
-    $SINGULARITY_CMD
-    _echo "Awaiting prep completion."
-    sleep 5
-    PREP_STATUS="blank"
-    MAX_SLEEP_SECS=10
-    while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
-        MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - 1 ))
-        if [ $MAX_SLEEP_SECS -eq 0 ]; then _error "Timeout waiting for prep success status."; fi
-        sleep 1
-        PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
-        _echo "PREP_STATUS: $PREP_STATUS"
-    done
-
-    export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
-    export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
-    export CAR_FILE=`ls -tr $CAR_DIR/*.car | tail -1`
-}
-
-function client_lotus_deal() {
-
-    _prep_test_data  # Setup DATA_CID, CAR_FILE, DATASET_NAME
-    if [[ -z "$CLIENT_WALLET_ADDRESS" || -z "$DATA_CID" || -z "$CAR_FILE" || -z "$DATASET_NAME" ]]; then
-        _error "CLIENT_WALLET_ADDRESS, DATA_CID, CAR_FILE, DATASET_NAME need to be defined."
-    fi
-    _echo "📦📦📦 Making Deals..."
-    _echo "CLIENT_WALLET_ADDRESS, DATA_CID, CAR_FILE, DATASET_NAME: $CLIENT_WALLET_ADDRESS, $DATA_CID, $CAR_FILE, $DATASET_NAME"
-    _echo "Importing CAR into Lotus..."
-    lotus client import --car $CAR_FILE
-    sleep 2
-
-    QUERY_ASK_CMD="lotus client query-ask $MINERID"
-    _echo "Executing: $QUERY_ASK_CMD"
-    QUERY_ASK_OUT=$($QUERY_ASK_CMD)
-    _echo "query-ask response: $QUERY_ASK_OUT"
-
-    # E.g. Price per GiB per 30sec epoch: 0.0000000005 FIL
-    PRICE=0.000000000000001
-    CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
-    SEALING_DELAY_EPOCHS=$(( 60 * 2 )) # seconds
-    START_EPOCH=$(( $CURRENT_EPOCH + $SEALING_DELAY_EPOCHS ))
-    DURATION_EPOCHS=$(( 180 * 2880 )) # 180 days
-    _echo "CURRENT_EPOCH:$CURRENT_EPOCH; START_EPOCH (ignored TODO):$START_EPOCH; SEALING_DELAY_EPOCHS:$SEALING_DELAY_EPOCHS; DURATION_EPOCHS:$DURATION_EPOCHS"
-    # TODO: tune miner config.
-    #  StorageDealError when using switch: --start-epoch $START_EPOCH , possibly caused by autosealing miner config.
-    DEAL_CMD="lotus client deal --from $CLIENT_WALLET_ADDRESS $DATA_CID $MINERID $PRICE $DURATION_EPOCHS"
-    _echo "Client Dealing... executing: $DEAL_CMD"
-    DEAL_ID=`$DEAL_CMD`
-    _echo "DEAL_ID: $DEAL_ID"
-    sleep 2
-    lotus client list-deals --show-failed -v                                                                   
-    lotus client get-deal $DEAL_ID
-}
-
 function install_singularity() {
     rm -rf $HOME/singularity
     rm -rf $HOME/.singularity
@@ -290,12 +226,6 @@ function install_singularity() {
     mv -f ./generate-car /root/singularity/node_modules/.bin
 }
 
-function verify_singularity_installation() {
-    _echo "verifying singularity installation, running prep test..."
-    generate_test_data
-    test_singularity_prep
-}
-
 function init_singularity() {
     stop_singularity
     sleep 2
@@ -306,6 +236,12 @@ function init_singularity() {
     echo "Setting up config for deal prep only."
     cp $HOME/.singularity/default.toml $HOME/.singularity/default.toml.orig
     cp $HOME/filecoin-data-onboarding-tools/singularity/my-singularity-config.toml $HOME/.singularity/default.toml
+}
+
+function verify_singularity_installation() {
+    _echo "verifying singularity installation, running prep test..."
+    generate_test_data
+    test_singularity_prep
 }
 
 function full_build_test() {

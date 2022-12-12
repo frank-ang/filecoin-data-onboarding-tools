@@ -8,7 +8,17 @@
 
 . $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
 
-function _prep_test_data() {
+function generate_test_data() {
+    export DATASET_NAME=`uuidgen | cut -d'-' -f1`
+    _echo "Generating test data for dataset: $DATASET_NAME"
+    export DATASET_SOURCE_DIR=/tmp/source/$DATASET_NAME
+    rm -rf $DATASET_SOURCE_DIR && mkdir -p $DATASET_SOURCE_DIR
+    DATA_FILE="$DATASET_SOURCE_DIR/$DATASET_NAME.dat"
+    dd if=/dev/urandom of="$DATA_FILE" bs=1024 count=1 iflag=fullblock
+    echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
+}
+
+function _prep_test_data() { # TODO, refactor into generate_test_data()
     # Generate test data
     _echo "Generating test data..."
     export DATASET_NAME=`uuidgen | cut -d'-' -f1`
@@ -92,16 +102,6 @@ function retrieve_wait() {
         _echo "RETRY_COUNT: $RETRY_COUNT"
         sleep 60
     done
-}
-
-function generate_test_data() {
-    export DATASET_NAME=`uuidgen | cut -d'-' -f1`
-    _echo "Generating test data for dataset: $DATASET_NAME"
-    export DATASET_SOURCE_DIR=/tmp/source/$DATASET_NAME
-    rm -rf $DATASET_SOURCE_DIR && mkdir -p $DATASET_SOURCE_DIR
-    DATA_FILE="$DATASET_SOURCE_DIR/$DATASET_NAME.dat"
-    dd if=/dev/urandom of="$DATA_FILE" bs=1024 count=1 iflag=fullblock
-    echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
 }
 
 function test_singularity_prep() {
@@ -209,8 +209,8 @@ function test_lotus_retrieve() {
     lotus_retrieve $DATA_CID $RETRIEVE_CAR_FILE
     SOURCE_CAR_FILE="$CAR_DIR/$PIECE_CID.car"
     DIFF_CMD="diff $RETRIEVE_CAR_FILE $SOURCE_CAR_FILE"
-    _echo "comparing retrieved against original: $DIFF_CMD" || _error "retrieved file differs from original"
-    $DIFF_CMD
+    _echo "comparing retrieved against original: $DIFF_CMD"
+    $DIFF_CMD || _error "retrieved file differs from original"
 }
 
 function lotus_retrieve() {
@@ -261,10 +261,15 @@ function update_dns_txt_record_route53() {
 function test_singularity_retrieve() {
     setup_singularity_index
     #update_dns_txt_record_route53
+    RETRIEVE_FILE_PATH=/tmp/retrieve/$DATASET_NAME/$DATASET_NAME.dat
+    rm -f $RETRIEVE_FILE_PATH
+    mkdir -p /tmp/retrieve/$DATASET_NAME
     _exec "singularity-retrieve ls -v singularity:/$INDEX_ROOT_IPFS/"
     _exec "singularity-retrieve ls -v singularity:/$INDEX_ROOT_IPFS/$DATASET_NAME.dat"
-    _exec "singularity-retrieve cp -p $MINERID singularity:/$INDEX_ROOT_IPFS/$DATASET_NAME.dat ."
-    _exec "diff ./$DATASET_NAME.dat $DATASET_PATH/$DATASET_NAME.dat"
+    _exec "singularity-retrieve cp -p $MINERID singularity:/$INDEX_ROOT_IPFS/$DATASET_NAME.dat $RETRIEVE_FILE_PATH"
+    DIFF_CMD="diff $RETRIEVE_FILE_PATH $DATASET_PATH/$DATASET_NAME/$DATASET_NAME.dat"
+    _echo "Comparing retrieved against original. Command: $DIFF_CMD"
+    $DIFF_CMD || _error "retrieved file differs from original"
 }
 
 function test_singularity_retrieve_standalone() {
