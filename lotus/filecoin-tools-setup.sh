@@ -22,9 +22,6 @@ TEST_CONFIG_FILE="$ROOT_SCRIPT_PATH/lotus/test_config.gitignore"
 LOTUS_MINER_CONFIG_FILE="$ROOT_SCRIPT_PATH/lotus/lotusminer-autopublish-config.toml"
 LOTUS_SOURCE=$HOME/lotus/
 SINGULARITY_OUT_CSV="$ROOT_SCRIPT_PATH/lotus/singularity-out.csv"
-export DATASET_PATH=/tmp/source
-export CAR_DIR=/tmp/car
-export RETRIEVE_CAR_DIR=/tmp/car-retrieve
 
 # set golang env vars, because sourcing .bashrc appears not to work in userdata.
 export GOPATH=/root/go

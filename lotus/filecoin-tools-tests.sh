@@ -1,33 +1,57 @@
 #!/bin/bash
-# Run as root.
-# E.g. via nohup or tmux:
-#         ./lotus-init-devnet.sh full_rebuild_test > ./full_rebuild_test.out 2>&1 &
-# Build Lotus devnet from source, configure, run devnet
-# Based on: 
-# https://lotus.filecoin.io/lotus/install/linux/#building-from-source
+# Run as root. Execute from filecoin-tools-setup.sh instead of this script directly.
+# To execute a full install and test. Recommend run headless via nohup or tmux.
+
+export DATA_SOURCE_ROOT=/tmp/source
+export DATA_CAR_ROOT=/tmp/car
+export DATA_RETRIEVE_ROOT=/tmp/car-retrieve
 
 . $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
+GEN_TEST_DATA_SCRIPT=$(dirname $(realpath $0))"/gen-test-data.sh"
 
-function generate_test_data() {
+# Creates test data files in a subdirectory of DATA_SOURCE_ROOT
+# Params: FILE_COUNT, FILE_SIZE
+function generate_test_files() {
+    FILE_COUNT=${1:-1}
+    FILE_SIZE=${2:-1024}
     export DATASET_NAME=`uuidgen | cut -d'-' -f1`
-    _echo "Generating test data for dataset: $DATASET_NAME"
-    export DATASET_SOURCE_DIR=/tmp/source/$DATASET_NAME
+    DATASET_SOURCE_DIR=$DATA_SOURCE_ROOT/$DATASET_NAME
     rm -rf $DATASET_SOURCE_DIR && mkdir -p $DATASET_SOURCE_DIR
-    DATA_FILE="$DATASET_SOURCE_DIR/$DATASET_NAME.dat"
-    dd if=/dev/urandom of="$DATA_FILE" bs=1024 count=1 iflag=fullblock
+    CMD="$GEN_TEST_DATA_SCRIPT -c $FILE_COUNT -s $FILE_SIZE -p test -d $DATASET_SOURCE_DIR"
+    _echo "Generating test data for dataset: $DATASET_NAME, Files: $FILE_COUNT, Size: $FILE_SIZE"
+    _echo "Executing $CMD"
+    $CMD >> /dev/null 2>&1
     echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
 }
 
-function _prep_test_data() { # TODO, refactor into generate_test_data()
-    # Generate test data
-    _echo "Generating test data..."
-    export DATASET_NAME=`uuidgen | cut -d'-' -f1`
-    echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
+function generate_test_data() {
+    generate_test_files 1 1024
+    PREP_CAR_CMD="singularity prep create $DATASET_NAME $DATA_SOURCE_ROOT/$DATASET_NAME $DATA_CAR_ROOT/$DATASET_NAME"
+    _echo "Preparing data into car, executing: $PREP_CAR_CMD"
+    $PREP_CAR_CMD
+    _echo "Awaiting prep completion."
+    sleep 5
+    PREP_STATUS=""
+    MAX_SLEEP_SECS=120
+    RETRY_INTERVAL_SECS=10
+    while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
+        MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - $RETRY_INTERVAL_SECS ))
+        if [ $MAX_SLEEP_SECS -le 0 ]; then _error "Timeout waiting for prep success status."; fi
+        sleep $RETRY_INTERVAL_SECS
+        PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
+    done
+    # TODO there may be multiple of the following per prep request.
+    export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
+    export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
+    export CAR_FILE=`ls -tr $DATA_CAR_ROOT/*.car | tail -1`
+}
 
-    rm -rf $CAR_DIR && mkdir -p $CAR_DIR
-    rm -rf $DATASET_PATH && mkdir -p $DATASET_PATH
-    dd if=/dev/urandom of="$DATASET_PATH/$DATASET_NAME.dat" bs=1024 count=1 iflag=fullblock
-    export SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_PATH $CAR_DIR"
+function _prep_test_data() {
+    _echo "Generating test data..."
+    generate_test_data_multi 1 1024
+    rm -rf $DATA_SOURCE_ROOT && mkdir -p $DATA_SOURCE_ROOT
+    rm -rf $DATA_CAR_ROOT && mkdir -p $DATA_CAR_ROOT
+    SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATA_SOURCE_ROOT $DATA_CAR_ROOT"
     _echo "Preparing data via command: $SINGULARITY_CMD"
     $SINGULARITY_CMD
     _echo "Awaiting prep completion."
@@ -44,7 +68,7 @@ function _prep_test_data() { # TODO, refactor into generate_test_data()
 
     export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
     export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
-    export CAR_FILE=`ls -tr $CAR_DIR/*.car | tail -1`
+    export CAR_FILE=`ls -tr $DATA_CAR_ROOT/*.car | tail -1`
 }
 
 function client_lotus_deal() {
@@ -106,10 +130,10 @@ function retrieve_wait() {
 
 function test_singularity_prep() {
     _echo "Testing singularity prep..."
-    export CAR_DIR=/tmp/car/$DATASET_NAME
+    export DATA_CAR_ROOT=/tmp/car/$DATASET_NAME
     DATASET_SOURCE_DIR=/tmp/source/$DATASET_NAME
-    rm -rf $CAR_DIR && mkdir -p $CAR_DIR
-    SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_SOURCE_DIR $CAR_DIR"
+    rm -rf $DATA_CAR_ROOT && mkdir -p $DATA_CAR_ROOT
+    SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_SOURCE_DIR $DATA_CAR_ROOT"
     _echo "Preparing test data via command: $SINGULARITY_CMD"
     $SINGULARITY_CMD
     _echo "Awaiting prep completion."
@@ -127,7 +151,7 @@ function test_singularity_prep() {
     echo "export DATA_CID=$DATA_CID" >> $TEST_CONFIG_FILE
     export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
     echo "export PIECE_CID=$PIECE_CID" >> $TEST_CONFIG_FILE
-    export CAR_FILE=`ls -tr $CAR_DIR/*.car | tail -1`
+    export CAR_FILE=`ls -tr $DATA_CAR_ROOT/*.car | tail -1`
     echo "export CAR_FILE=$CAR_FILE" >> $TEST_CONFIG_FILE
 }
 
@@ -161,8 +185,8 @@ function test_singularity_repl() {
 
 function test_miner_import_car() {
     . $TEST_CONFIG_FILE
-    export CAR_DIR=/tmp/car/$DATASET_NAME
-    export CAR_FILE=`ls -tr $CAR_DIR/*.car | tail -1`
+    export DATA_CAR_ROOT=/tmp/car/$DATASET_NAME
+    export CAR_FILE=`ls -tr $DATA_CAR_ROOT/*.car | tail -1`
     IMPORT_CMD="lotus-miner storage-deals import-data $DEAL_CID $CAR_FILE"
     _echo "Importing car file into miner...executing: $IMPORT_CMD"
     $IMPORT_CMD
@@ -193,21 +217,21 @@ function test_miner_auto_import_script_DRAFT() {
     MINER_API_INFO="SETME"
     # Which utility to use?: singularity-import
     AUTO_IMPORT_SCRIPT="$HOME/singularity/scripts/auto-import.sh"
-    # Example: ./auto-import.sh <car_dir_path> <verified_client_address>
+    # Example: ./auto-import.sh <DATA_CAR_ROOT_path> <verified_client_address>
     # auto-import.sh requires variables to be set.
     # Tested this is working: lotus-miner storage-deals import-data <proposal CID> <file>
     _echo "importing storage deals..."
-    $AUTO_IMPORT_SCRIPT $CAR_DIR $CLIENT_WALLET_ADDRESS
+    $AUTO_IMPORT_SCRIPT $DATA_CAR_ROOT $CLIENT_WALLET_ADDRESS
 }
 
 function test_lotus_retrieve() {
     . $TEST_CONFIG_FILE
     _echo "testing lotus retrieve for DATASET_NAME: $DATASET_NAME"
-    RETRIEVE_CAR_FILE="$RETRIEVE_CAR_DIR/$DATASET_NAME/retrieved.car"
-    rm -rf "$RETRIEVE_CAR_DIR/$DATASET_NAME"
-    mkdir -p "$RETRIEVE_CAR_DIR/$DATASET_NAME"
+    RETRIEVE_CAR_FILE="$DATA_RETRIEVE_ROOT/$DATASET_NAME/retrieved.car"
+    rm -rf "$DATA_RETRIEVE_ROOT/$DATASET_NAME"
+    mkdir -p "$DATA_RETRIEVE_ROOT/$DATASET_NAME"
     lotus_retrieve $DATA_CID $RETRIEVE_CAR_FILE
-    SOURCE_CAR_FILE="$CAR_DIR/$PIECE_CID.car"
+    SOURCE_CAR_FILE="$DATA_CAR_ROOT/$PIECE_CID.car"
     DIFF_CMD="diff $RETRIEVE_CAR_FILE $SOURCE_CAR_FILE"
     _echo "comparing retrieved against original: $DIFF_CMD"
     $DIFF_CMD || _error "retrieved file differs from original"
@@ -267,7 +291,7 @@ function test_singularity_retrieve() {
     _exec "singularity-retrieve ls -v singularity:/$INDEX_ROOT_IPFS/"
     _exec "singularity-retrieve ls -v singularity:/$INDEX_ROOT_IPFS/$DATASET_NAME.dat"
     _exec "singularity-retrieve cp -p $MINERID singularity:/$INDEX_ROOT_IPFS/$DATASET_NAME.dat $RETRIEVE_FILE_PATH"
-    DIFF_CMD="diff $RETRIEVE_FILE_PATH $DATASET_PATH/$DATASET_NAME/$DATASET_NAME.dat"
+    DIFF_CMD="diff $RETRIEVE_FILE_PATH $DATA_SOURCE_ROOT/$DATASET_NAME/$DATASET_NAME.dat"
     _echo "Comparing retrieved against original. Command: $DIFF_CMD"
     $DIFF_CMD || _error "retrieved file differs from original"
 }
