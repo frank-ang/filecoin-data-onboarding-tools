@@ -141,7 +141,7 @@ Resources:
           echo "## Downloading Repo"
           cd $HOME
           git clone https://github.com/frank-ang/filecoin-data-onboarding-tools.git
-          cd ./filecoin-data-onboarding-tools && git fetch && git switch test
+          cd ./filecoin-data-onboarding-tools &&  && git switch test
           
           echo "## Installing Ubuntu prereqs required by Filecoin client tools."
           cd $HOME/filecoin-data-onboarding-tools/aws/

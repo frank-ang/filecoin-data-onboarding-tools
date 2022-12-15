@@ -230,7 +230,7 @@ function init_singularity() {
     echo "Initializing Singularity..."
     singularity init
     ls $HOME/.singularity
-    echo "Setting up config for deal prep only."
+    echo "Deploying demo Singularity config.toml"
     cp $HOME/.singularity/default.toml $HOME/.singularity/default.toml.orig
     cp $HOME/filecoin-data-onboarding-tools/singularity/my-singularity-config.toml $HOME/.singularity/default.toml
 }
@@ -241,7 +241,10 @@ function verify_singularity_installation() {
     test_singularity_prep
 }
 
-function full_build_test() {
+
+function full_build_test_deprecated() {
+    stop_daemons || true
+    rm -rf $HOME/.ipfs
 
     setup_ipfs
     start_ipfs
@@ -249,7 +252,7 @@ function full_build_test() {
     install_singularity
     init_singularity
     start_singularity
-    verify_singularity_installation
+    # verify_singularity_installation
 
     build_lotus
     init_daemons && sleep 10
@@ -257,7 +260,58 @@ function full_build_test() {
     stop_daemons && sleep 2
     deploy_miner_config
     restart_daemons && sleep 2
+    #### 
+    setup_wallets && sleep 5
 
+    _echo "lotus-miner storage-deals and sectors..."
+    lotus-miner storage-deals list -v
+    lotus-miner sectors list
+
+    client_lotus_deal && sleep 5   # Legacy deals.
+
+    _echo "lotus-miner storage-deals and sectors..."
+    lotus-miner storage-deals list -v
+    lotus-miner sectors list
+
+    # Wait some time for deal to seal and appear onchain.
+    SEAL_SLEEP_SECS=$(( 60*2 )) # 2 mins
+    _echo "📦 sleeping $SEAL_SLEEP_SECS secs for sealing..." && sleep $SEAL_SLEEP_SECS
+
+    _echo "lotus-miner storage-deals and sectors..."
+    lotus-miner storage-deals list -v
+    lotus-miner sectors list
+
+    _echo "📦 retrieving CID: $DATA_CID" && retrieve_wait "$DATA_CID"
+    # compare source file with retrieved file.
+    _echo "comparing source file with retrieved file."
+    diff -r /tmp/source `pwd`/retrieved.car.gitignore && _echo "comparison succeeded."
+
+    test_singularity
+}
+
+function setup_base_image() {
+    _echo "setting up base image..."
+    stop_daemons || true
+    rm -rf $HOME/.ipfs
+
+    setup_ipfs
+    start_ipfs
+
+    install_singularity
+    init_singularity
+    start_singularity
+    # verify_singularity_installation
+
+    build_lotus
+    init_daemons && sleep 10
+
+    stop_daemons && sleep 2
+    deploy_miner_config
+}
+
+function run_tests() {
+    _echo "running tests..."
+    restart_daemons && sleep 2
     setup_wallets && sleep 5
 
     _echo "lotus-miner storage-deals and sectors..."
@@ -288,7 +342,7 @@ function full_build_test() {
 
 # Entry point.
 function run() {
-    full_build_test
+    time setup_base_image
 }
 
 # Execute function from parameters

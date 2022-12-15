@@ -31,6 +31,6 @@ while [ $filecount -gt 0 ]; do
     count_blocks=$(( $filesize/$block_size ))
     CMD="dd if=/dev/urandom of="$dirname/$prefix-$filecount" bs=$block_size count=$count_blocks iflag=fullblock"
     echo "executing: $CMD"
-    $CMD
+    $CMD 2>&1
     ((filecount-=1))
 done
