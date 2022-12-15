@@ -241,8 +241,7 @@ function verify_singularity_installation() {
     test_singularity_prep
 }
 
-
-function full_build_test_deprecated() {
+function full_build_test_DEPRECATED() {
     stop_daemons || true
     rm -rf $HOME/.ipfs
 
@@ -282,7 +281,6 @@ function full_build_test_deprecated() {
     lotus-miner sectors list
 
     _echo "📦 retrieving CID: $DATA_CID" && retrieve_wait "$DATA_CID"
-    # compare source file with retrieved file.
     _echo "comparing source file with retrieved file."
     diff -r /tmp/source `pwd`/retrieved.car.gitignore && _echo "comparison succeeded."
 
@@ -300,16 +298,19 @@ function setup_base_image() {
     install_singularity
     init_singularity
     start_singularity
-    # verify_singularity_installation
+    # verify_singularity_installation # optional, and broken (TODO)
 
     build_lotus
     init_daemons && sleep 10
 
     stop_daemons && sleep 2
     deploy_miner_config
+    _echo "Base image completed..."
 }
 
 function run_tests() {
+    . $TEST_CONFIG_FILE
+
     _echo "running tests..."
     restart_daemons && sleep 2
     setup_wallets && sleep 5
@@ -342,7 +343,8 @@ function run_tests() {
 
 # Entry point.
 function run() {
-    time setup_base_image
+    # time setup_base_image
+    run_tests
 }
 
 # Execute function from parameters
