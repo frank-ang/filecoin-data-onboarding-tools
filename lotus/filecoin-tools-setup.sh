@@ -230,7 +230,7 @@ function init_singularity() {
     echo "Initializing Singularity..."
     singularity init
     ls $HOME/.singularity
-    echo "Deploying demo Singularity config.toml"
+    echo "Setting up config for deal prep only."
     cp $HOME/.singularity/default.toml $HOME/.singularity/default.toml.orig
     cp $HOME/filecoin-data-onboarding-tools/singularity/my-singularity-config.toml $HOME/.singularity/default.toml
 }
@@ -241,9 +241,7 @@ function verify_singularity_installation() {
     test_singularity_prep
 }
 
-function full_build_test_DEPRECATED() {
-    stop_daemons || true
-    rm -rf $HOME/.ipfs
+function full_build_test() {
 
     setup_ipfs
     start_ipfs
@@ -251,7 +249,7 @@ function full_build_test_DEPRECATED() {
     install_singularity
     init_singularity
     start_singularity
-    # verify_singularity_installation
+    verify_singularity_installation
 
     build_lotus
     init_daemons && sleep 10
@@ -259,60 +257,7 @@ function full_build_test_DEPRECATED() {
     stop_daemons && sleep 2
     deploy_miner_config
     restart_daemons && sleep 2
-    #### 
-    setup_wallets && sleep 5
 
-    _echo "lotus-miner storage-deals and sectors..."
-    lotus-miner storage-deals list -v
-    lotus-miner sectors list
-
-    client_lotus_deal && sleep 5   # Legacy deals.
-
-    _echo "lotus-miner storage-deals and sectors..."
-    lotus-miner storage-deals list -v
-    lotus-miner sectors list
-
-    # Wait some time for deal to seal and appear onchain.
-    SEAL_SLEEP_SECS=$(( 60*2 )) # 2 mins
-    _echo "📦 sleeping $SEAL_SLEEP_SECS secs for sealing..." && sleep $SEAL_SLEEP_SECS
-
-    _echo "lotus-miner storage-deals and sectors..."
-    lotus-miner storage-deals list -v
-    lotus-miner sectors list
-
-    _echo "📦 retrieving CID: $DATA_CID" && retrieve_wait "$DATA_CID"
-    _echo "comparing source file with retrieved file."
-    diff -r /tmp/source `pwd`/retrieved.car.gitignore && _echo "comparison succeeded."
-
-    test_singularity
-}
-
-function setup_base_image() {
-    _echo "setting up base image..."
-    stop_daemons || true
-    rm -rf $HOME/.ipfs
-
-    setup_ipfs
-    start_ipfs
-
-    install_singularity
-    init_singularity
-    start_singularity
-    # verify_singularity_installation # optional, and broken (TODO)
-
-    build_lotus
-    init_daemons && sleep 10
-
-    stop_daemons && sleep 2
-    deploy_miner_config
-    _echo "Base image completed..."
-}
-
-function run_tests() {
-    . $TEST_CONFIG_FILE
-
-    _echo "running tests..."
-    restart_daemons && sleep 2
     setup_wallets && sleep 5
 
     _echo "lotus-miner storage-deals and sectors..."
@@ -343,8 +288,7 @@ function run_tests() {
 
 # Entry point.
 function run() {
-    # time setup_base_image
-    run_tests
+    full_build_test
 }
 
 # Execute function from parameters

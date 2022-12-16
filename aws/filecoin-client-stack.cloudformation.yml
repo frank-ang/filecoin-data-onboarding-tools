@@ -99,8 +99,7 @@ Resources:
       KeyName: !Ref KeyPair
       InstanceType: !Ref InstanceType
       AvailabilityZone: !Ref AZ
-      # ImageId: !Ref LatestUbuntuFocalAMI
-      ImageId: ami-0d9ef727e078d42a4 # hardcoded to tools baked into AMI. TODO improve this...
+      ImageId: !Ref LatestUbuntuFocalAMI
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
@@ -108,7 +107,7 @@ Resources:
             VolumeSize: 50 # season to taste
       Tags:
         - Key: Name
-          Value: filecoin-client-tools
+          Value: singularity-test
       IamInstanceProfile: !Ref InstanceProfile
       UserData:
         Fn::Base64: !Sub |
@@ -127,30 +126,26 @@ Resources:
 
           export HOME=/root
           cd $HOME
-          
-          #### commented out for baked-AMI test. TODO restore.
-          #apt update
-          #apt install -y unzip
-          #echo "## Installing AWS dependencies..."
-          #cd $HOME
-          #wget --no-verbose -O /tmp/aws-cfn-bootstrap-py3-latest.tar.gz https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
-          #python3 -m easy_install --script-dir /opt/aws/bin /tmp/aws-cfn-bootstrap-py3-latest.tar.gz
-          #echo "## Installing AWS CLI v2..."
-          #curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-          #unzip -q awscliv2.zip
-          #./aws/install
-          #echo "## AWS dependencies installed."
+          apt update
+          apt install -y unzip
+          echo "## Installing AWS dependencies..."
+          cd $HOME
+          wget --no-verbose -O /tmp/aws-cfn-bootstrap-py3-latest.tar.gz https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+          python3 -m easy_install --script-dir /opt/aws/bin /tmp/aws-cfn-bootstrap-py3-latest.tar.gz
+          echo "## Installing AWS CLI v2..."
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          ./aws/install
+          echo "## AWS dependencies installed."
 
           echo "## Downloading Repo"
           cd $HOME
-          rm -rf ./filecoin-data-onboarding-tools
           git clone https://github.com/frank-ang/filecoin-data-onboarding-tools.git
-          cd ./filecoin-data-onboarding-tools && git fetch  && git switch test
-
-          #### commented out for baked-AMI test. TODO restore.
-          #echo "## Installing Ubuntu prereqs required by Filecoin client tools."
-          #cd $HOME/filecoin-data-onboarding-tools/aws/
-          #./filecoin-ubuntu-prereqs.sh run >> /var/log/filecoin-ubuntu-prereqs.log 2>&1
+          cd ./filecoin-data-onboarding-tools && git fetch && git switch test
+          
+          echo "## Installing Ubuntu prereqs required by Filecoin client tools."
+          cd $HOME/filecoin-data-onboarding-tools/aws/
+          ./filecoin-ubuntu-prereqs.sh run >> /var/log/filecoin-ubuntu-prereqs.log 2>&1
 
           echo "## Setting up Filecoin client tools (background)..."
           cd $HOME/filecoin-data-onboarding-tools/lotus
