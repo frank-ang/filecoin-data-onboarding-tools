@@ -9,7 +9,8 @@ export DATA_RETRIEVE_ROOT=/tmp/car-retrieve
 . $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
 GEN_TEST_DATA_SCRIPT=$(dirname $(realpath $0))"/gen-test-data.sh"
 
-# Creates test data files in a subdirectory of DATA_SOURCE_ROOT
+# Creates test data files in subdirectory $DATA_SOURCE_ROOT/$DATASET_NAME/test.dat
+# generates and exports a random DATASET_NAME
 # Params: FILE_COUNT, FILE_SIZE
 function generate_test_files() {
     FILE_COUNT=${1:-1}
@@ -26,6 +27,7 @@ function generate_test_files() {
 
 function generate_test_data() {
     generate_test_files 1 1024
+    [[ -z "$DATASET_NAME" ]] && { _error "DATASET_NAME is required"; }
     PREP_CAR_CMD="singularity prep create $DATASET_NAME $DATA_SOURCE_ROOT/$DATASET_NAME $DATA_CAR_ROOT/$DATASET_NAME"
     _echo "Preparing data into car, executing: $PREP_CAR_CMD"
     $PREP_CAR_CMD
@@ -48,9 +50,9 @@ function generate_test_data() {
 
 function _prep_test_data() {
     _echo "Generating test data..."
-    generate_test_data_multi 1 1024
     rm -rf $DATA_SOURCE_ROOT && mkdir -p $DATA_SOURCE_ROOT
     rm -rf $DATA_CAR_ROOT && mkdir -p $DATA_CAR_ROOT
+    generate_test_files 1 1024
     SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATA_SOURCE_ROOT $DATA_CAR_ROOT"
     _echo "Preparing data via command: $SINGULARITY_CMD"
     $SINGULARITY_CMD
