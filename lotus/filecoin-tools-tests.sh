@@ -4,7 +4,9 @@
 
 export DATA_SOURCE_ROOT=/tmp/source
 export DATA_CAR_ROOT=/tmp/car
-export DATA_RETRIEVE_ROOT=/tmp/car-retrieve
+export CAR_RETRIEVE_ROOT=/tmp/car-retrieve
+export RETRIEVE_ROOT=/tmp/retrieve
+export SINGULARITY_CSV_ROOT=/tmp/singularity-csv
 
 . $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
 GEN_TEST_DATA_SCRIPT=$(dirname $(realpath $0))"/gen-test-data.sh"
@@ -27,7 +29,7 @@ function generate_test_files() {
     [[ -z "$DATASET_SOURCE_DIR" ]] && { _error "generate_test_files DATASET_SOURCE_DIR is required" ; }
     mkdir -p "$DATASET_SOURCE_DIR"
     while [[ "$FILE_COUNT" -gt 0 ]]; do
-        BLOCK_SIZE=1024
+        BLOCK_SIZE=$(( $FILE_SIZE < 1024 ? 1 : 1024 ))
         COUNT_BLOCKS=$(( $FILE_SIZE/$BLOCK_SIZE ))
         CMD="dd if=/dev/urandom of="$DATASET_SOURCE_DIR/$PREFIX-$FILE_COUNT" bs=$BLOCK_SIZE count=$COUNT_BLOCKS iflag=fullblock"
         _echo "executing: $CMD"
@@ -57,7 +59,6 @@ function _prep_test_data_lotus_deprecated() {
         PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
         _echo "PREP_STATUS: $PREP_STATUS"
     done
-
     export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
     export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
     export CAR_FILE=`ls -tr $DATA_CAR_ROOT/*.car | tail -1`
@@ -188,43 +189,39 @@ function test_singularity_prep() {
 
 function test_singularity_repl_multi_car() {
     _echo "Testing singularity replicate with multi car..."
-    _echo "## importing car files into lotus from directory: $DATASET_CAR_ROOT"
     DATASET_CAR_ROOT=$DATA_CAR_ROOT/$DATASET_NAME
+    _echo "## importing car files into lotus from directory: $DATASET_CAR_ROOT"
     ls $DATASET_CAR_ROOT
-    for CAR_FILE in $( ls $DATASET_CAR_ROOT/*.car ); do ## TODO TROUBLEHSOOT
+    for CAR_FILE in $( ls $DATASET_CAR_ROOT/*.car ); do
         echo "CAR_FILE: $CAR_FILE"
         LOTUS_CLIENT_IMPORT_CAR_CMD="lotus client import --car $CAR_FILE"
         _echo "Executing command: $LOTUS_CLIENT_IMPORT_CAR_CMD"
         $LOTUS_CLIENT_IMPORT_CAR_CMD
     done
-    #LOTUS_CLIENT_IMPORT_CAR_CMD="lotus client import --car $CAR_FILE"
-    #_echo "Executing command: $LOTUS_CLIENT_IMPORT_CAR_CMD"
-    #$LOTUS_CLIENT_IMPORT_CAR_CMD
-
     unset FULLNODE_API_INFO
     CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
     START_DELAY_DAYS=$(( $CURRENT_EPOCH / 2880 + 1 )) # 1 day floor.
     _echo "CURRENT_EPOCH: $CURRENT_EPOCH , START_DELAY_DAYS: $START_DELAY_DAYS"
     DURATION_DAYS=180
     PRICE="953" # TODO hardcoded magic number
-    REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    CSV_DIR="$SINGULARITY_CSV_ROOT/$DATASET_NAME"
+    REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $CSV_DIR $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
     _echo "Executing replication command: $REPL_CMD"
-    $REPL_CMD
+    $REPL_CMD # TODO investigate ERROR: data doesn't fit in a sector
     sleep 1
     export REPL_ID=$(singularity repl list | grep $DATASET_ID | sed -n -r 's/^│[[:space:]]+[0-9]+[[:space:]]+│[[:space:]]*'\''([^'\'']*).*/\1/p')
-    _echo "looking up singularity replication ID: $REPL_ID , for dataset ID: $DATASET_ID"
+    _echo "Singularity replication ID: $REPL_ID , for dataset ID: $DATASET_ID"
     REPL_STATUS_JSON=$(singularity repl status -v $REPL_ID)
-    #export DEAL_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dealCid')
-    #export DATA_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dataCid')
+    echo "export REPL_ID=$REPL_ID" >> $TEST_CONFIG_FILE
+    export DEAL_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dealCid')
+    echo "export DEAL_CID=$DEAL_CID" >> $TEST_CONFIG_FILE
+    export DATA_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dataCid')
+    echo "export DATA_CID=$DATA_CID" >> $TEST_CONFIG_FILE
+    _echo "REPL_ID=$REPL_ID ; DEAL_CID=$DEAL_CID ; DATA_CID=$DATA_CID"
     #export PIECE_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].pieceCid')
-    #echo "export REPL_ID=$REPL_ID" >> $TEST_CONFIG_FILE
     # TODO: handle the case where 1 replication has many deals.
-    #echo "export DEAL_CID=$DEAL_CID" >> $TEST_CONFIG_FILE
-    #echo "export DATA_CID=$DATA_CID" >> $TEST_CONFIG_FILE
     #echo "export PIECE_CID=$PIECE_CID" >> $TEST_CONFIG_FILE
 }
-
-
 
 function test_singularity_repl() {
     _echo "Testing singularity replicate..."
@@ -237,7 +234,7 @@ function test_singularity_repl() {
     _echo "CURRENT_EPOCH: $CURRENT_EPOCH , START_DELAY_DAYS: $START_DELAY_DAYS"
     DURATION_DAYS=180
     PRICE="953"
-    REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $SINGULARITY_CSV_ROOT/$DATASET_NAME $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
     _echo "Executing replication command: $REPL_CMD" 
     $REPL_CMD
     sleep 1
@@ -254,14 +251,31 @@ function test_singularity_repl() {
     echo "export PIECE_CID=$PIECE_CID" >> $TEST_CONFIG_FILE
 }
 
-
-
+function test_miner_import_multi_car() {
+    . $TEST_CONFIG_FILE
+    DATASET_CAR_ROOT="$DATA_CAR_ROOT/$DATASET_NAME"
+    CSV_DIR="$SINGULARITY_CSV_ROOT/$DATASET_NAME"
+    echo "looping thru deals in $CSV_DIR"
+    for CSV in $( ls $CSV_DIR/*.csv ); do
+        echo "looping thru $CSV"
+        while IFS="," read -r miner_id deal_cid filename data_cid piece_cid start_epoch full_url
+        do
+            echo "miner_id:$miner_id, deal_cid:$deal_cid filename:$filename data_cid:$data_cid piece_cid:$piece_cid start_epoch:$start_epoch full_url:$full_url"
+            FILENAME=`echo $full_url | sed 's|.*/\([^/]*\).*|\1|g'`
+            CAR_FILE=$DATASET_CAR_ROOT/$FILENAME
+            MINER_IMPORT_CMD="lotus-miner storage-deals import-data $deal_cid $CAR_FILE"
+            echo "Importing car into miner...executing: $MINER_IMPORT_CMD"
+            $MINER_IMPORT_CMD
+            _echo "CAR file imported: $CAR_FILE"
+        done < <(tail -1 $CSV)
+    done
+    _echo "CAR files imported. Need to await miner sealing..."
+}
 
 function test_miner_import_car() {
     . $TEST_CONFIG_FILE
     export DATA_CAR_ROOT=/tmp/car/$DATASET_NAME
-    DATASET_CAR_ROOT=$DATA_CAR_ROOT/$DATASET_NAME
-    export CAR_FILE=`ls -tr $DATA_CAR_ROOT/*.car | tail -1`
+    export CAR_FILE=`ls -tr $DATA_CAR_ROOT/*.car | tail -1` # TODO only handles 1 file.
     IMPORT_CMD="lotus-miner storage-deals import-data $DEAL_CID $CAR_FILE"
     _echo "Importing car file into miner...executing: $IMPORT_CMD"
     $IMPORT_CMD
@@ -302,9 +316,9 @@ function test_miner_auto_import_script_DRAFT() {
 function test_lotus_retrieve() {
     . $TEST_CONFIG_FILE
     _echo "testing lotus retrieve for DATASET_NAME: $DATASET_NAME"
-    RETRIEVE_CAR_FILE="$DATA_RETRIEVE_ROOT/$DATASET_NAME/retrieved.car"
-    rm -rf "$DATA_RETRIEVE_ROOT/$DATASET_NAME"
-    mkdir -p "$DATA_RETRIEVE_ROOT/$DATASET_NAME"
+    RETRIEVE_CAR_FILE="$CAR_RETRIEVE_ROOT/$DATASET_NAME/retrieved.car"
+    rm -rf "$CAR_RETRIEVE_ROOT/$DATASET_NAME"
+    mkdir -p "$CAR_RETRIEVE_ROOT/$DATASET_NAME"
     lotus_retrieve $DATA_CID $RETRIEVE_CAR_FILE
     SOURCE_CAR_FILE="$DATA_CAR_ROOT/$PIECE_CID.car"
     DIFF_CMD="diff $RETRIEVE_CAR_FILE $SOURCE_CAR_FILE"
@@ -361,11 +375,11 @@ function test_singularity_retrieve() {
     setup_singularity_index
     #update_dns_txt_record_route53
     FILENAME="file-1" # Hardcoded
-    RETRIEVE_FILE_PATH=/tmp/retrieve/$DATASET_NAME
-    rm -rf /tmp/retrieve/$DATASET_NAME && mkdir -p /tmp/retrieve/$DATASET_NAME
+    RETRIEVE_FILE_PATH=$RETRIEVE_ROOT/$DATASET_NAME
+    rm -rf $RETRIEVE_ROOT/$DATASET_NAME && mkdir -p $RETRIEVE_ROOT/$DATASET_NAME
     _exec "singularity-retrieve ls -v singularity:/$INDEX_ROOT_IPFS/"
     _exec "singularity-retrieve ls -v singularity:/$INDEX_ROOT_IPFS/$FILENAME"
-    _exec "singularity-retrieve cp -p $MINERID singularity:/$INDEX_ROOT_IPFS/$FILENAME $RETRIEVE_FILE_PATH/$FILENAME"
+    _exec "singularity-retrieve cp -p $MINERID singularity:/$INDEX_ROOT_IPFS/$FILENAME $RETRIEVE_FILE_PATH/"
     DIFF_CMD="diff $RETRIEVE_FILE_PATH/$FILENAME $DATA_SOURCE_ROOT/$DATASET_NAME/$FILENAME"
     _echo "Comparing retrieved against original. Command: $DIFF_CMD"
     $DIFF_CMD || _error "retrieved file differs from original"
@@ -386,7 +400,7 @@ function _exec() {
 function reset_test_data() {
     rm -rf $DATA_SOURCE_ROOT/*
     rm -rf $DATA_CAR_ROOT/*
-    rm -rf $DATA_RETRIEVE_ROOT/*
+    rm -rf $CAR_RETRIEVE_ROOT/*
 }
 
 function test_singularity() {
@@ -412,7 +426,11 @@ function test_singularity() {
 
 function mytest() {
     . $TEST_CONFIG_FILE
-    generate_test_files 2 4096
+    generate_test_files 10 10 # generate_test_files 10 1024
     test_singularity_prep_multi_car
     test_singularity_repl_multi_car
+    _echo "sleeping, for miner to receive deal..." && sleep 60
+    test_miner_import_multi_car
+    read -p 'Check that sealing has completed. Then type Enter to proceed to test_singularity_retrieve: ' promptvar
+    test_singularity_retrieve
 }
