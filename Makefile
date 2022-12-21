@@ -52,6 +52,8 @@ deploy_script:
 	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/filecoin-tools-setup.sh /root/filecoin-data-onboarding-tools/lotus/"
 	scp lotus/filecoin-tools-tests.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/
 	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/filecoin-tools-tests.sh /root/filecoin-data-onboarding-tools/lotus/"
+	scp lotus/gen-test-data.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/
+	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/gen-test-data.sh /root/filecoin-data-onboarding-tools/lotus/"
 #	scp aws/dnslink_txt_record.template.json ubuntu@${AWS_APPLIANCE_IP}:/tmp/
 #	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/dnslink_txt_record.template.json /root/filecoin-data-onboarding-tools/aws/"
 

@@ -24,7 +24,7 @@ done
 [[ -z "$filesize" ]] && { echo "filesize bytes is required" ; exit 1; }
 [[ -z "$prefix" ]] && { echo "prefix is required" ; exit 1; }
 [[ -z "$dirname" ]] && { echo "dirname is required" ; exit 1; }
-echo "count of files to generate: $filecount; size per file (Bytes): $filesize; dir: $dir; prefix: $prefix";
+echo "count of files to generate: $filecount; size per file (Bytes): $filesize; dir: $dirname; prefix: $prefix";
 mkdir -p "$dirname"
 while [ $filecount -gt 0 ]; do
     block_size=1024

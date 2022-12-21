@@ -15,18 +15,37 @@ GEN_TEST_DATA_SCRIPT=$(dirname $(realpath $0))"/gen-test-data.sh"
 function generate_test_files() {
     FILE_COUNT=${1:-1}
     FILE_SIZE=${2:-1024}
+    DIRNAME=$3
     export DATASET_NAME=`uuidgen | cut -d'-' -f1`
-    DATASET_SOURCE_DIR=$DATA_SOURCE_ROOT/$DATASET_NAME
+    DATASET_SOURCE_DIR=$DIRNAME/$DATASET_NAME
     rm -rf $DATASET_SOURCE_DIR && mkdir -p $DATASET_SOURCE_DIR
-    CMD="$GEN_TEST_DATA_SCRIPT -c $FILE_COUNT -s $FILE_SIZE -p test -d $DATASET_SOURCE_DIR"
-    _echo "Generating test data for dataset: $DATASET_NAME, Files: $FILE_COUNT, Size: $FILE_SIZE"
-    _echo "Executing $CMD"
-    $CMD >> /dev/null 2>&1
+    _echo "Generating test data for dataset: $DATASET_NAME, Files: $FILE_COUNT, Size: $FILE_SIZE, output:$DATASET_SOURCE_DIR"
+    #CMD="$GEN_TEST_DATA_SCRIPT -c $FILE_COUNT -s $FILE_SIZE -p test -d $DATASET_SOURCE_DIR"
+    #_echo "Executing $CMD"
+    #$($CMD)
+    PREFIX="test"
+    [[ -z "$FILE_COUNT" ]] && { _exit "generate_test_files FILE_COUNT is required"; }
+    [[ -z "$FILE_SIZE" ]] && { _exit "generate_test_files FILE_SIZE bytes is required"; }
+    [[ -z "$PREFIX" ]] && { _exit "generate_test_files PREFIX is required" ; exit 1; }
+    [[ -z "$DIRNAME" ]] && { _exit "generate_test_files DIRNAME is required" ; exit 1; }
+    echo "count of files to generate: $FILE_COUNT; size per file (Bytes): $FILE_SIZE; dir: $DIRNAME; prefix: $prefix";
+    mkdir -p "$DIRNAME"
+    while [ $FILE_COUNT -gt 0 ]; do
+        BLOCK_SIZE=1024
+        COUNT_BLOCKS=$(( $FILE_SIZE/$BLOCK_SIZE ))
+        CMD="dd if=/dev/urandom of="$DIRNAME/$PREFIX-$FILE_COUNT" bs=$BLOCK_SIZE count=$COUNT_BLOCKS iflag=fullblock"
+        echo "executing: $CMD"
+        $CMD
+        ((FILE_COUNT-=1))
+    done
+    _echo "Test files created into $DATASET_SOURCE_DIR"
     echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
 }
 
+
+
 function generate_test_data() {
-    generate_test_files 1 1024
+    generate_test_files "1" "1024" "$DATA_SOURCE_ROOT"
     [[ -z "$DATASET_NAME" ]] && { _error "DATASET_NAME is required"; }
     PREP_CAR_CMD="singularity prep create $DATASET_NAME $DATA_SOURCE_ROOT/$DATASET_NAME $DATA_CAR_ROOT/$DATASET_NAME"
     _echo "Preparing data into car, executing: $PREP_CAR_CMD"
@@ -313,6 +332,7 @@ function test_singularity() {
     _echo "test_singularity starting..."
     . $TEST_CONFIG_FILE
     generate_test_data
+    _echo "FOO after generate_test_data..."
     test_singularity_prep
     test_singularity_repl
     _echo "test_singularity verify deals..."
