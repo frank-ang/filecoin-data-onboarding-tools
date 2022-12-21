@@ -9,7 +9,7 @@ export DATA_RETRIEVE_ROOT=/tmp/car-retrieve
 . $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
 GEN_TEST_DATA_SCRIPT=$(dirname $(realpath $0))"/gen-test-data.sh"
 
-# Creates test data files in subdirectory $DATA_SOURCE_ROOT/$DATASET_NAME/test.dat
+# Creates test data files with pattern: $DATA_SOURCE_ROOT/$DATASET_NAME/file-$FILE_COUNT
 # generates and sets a random DATASET_NAME
 # Params: FILE_COUNT, FILE_SIZE
 function generate_test_files() {
@@ -19,24 +19,24 @@ function generate_test_files() {
     export DATASET_NAME=`uuidgen | cut -d'-' -f1`
     DATASET_SOURCE_DIR=$DIRNAME/$DATASET_NAME
     rm -rf $DATASET_SOURCE_DIR && mkdir -p $DATASET_SOURCE_DIR
-    _echo "Generating test data for dataset: $DATASET_NAME, Files: $FILE_COUNT, Size: $FILE_SIZE, output:$DATASET_SOURCE_DIR"
+    _echo "Generating test files for dataset: $DATASET_NAME, Files: $FILE_COUNT, Size: $FILE_SIZE, output:$DATASET_SOURCE_DIR"
     #CMD="$GEN_TEST_DATA_SCRIPT -c $FILE_COUNT -s $FILE_SIZE -p test -d $DATASET_SOURCE_DIR"
     #_echo "Executing $CMD"
     #$($CMD)
-    PREFIX="test"
-    echo "count of files to generate: $FILE_COUNT; size per file (Bytes): $FILE_SIZE; dir: $DATASET_SOURCE_DIR; prefix: $prefix";
+    PREFIX="file"
+    _echo "count of files to generate: $FILE_COUNT; size per file (Bytes): $FILE_SIZE; dir: $DATASET_SOURCE_DIR; prefix: $PREFIX";
     [[ -z "$FILE_COUNT" ]] && { _error "generate_test_files FILE_COUNT is required"; }
     [[ -z "$FILE_SIZE" ]] && { _error "generate_test_files FILE_SIZE bytes is required"; }
     [[ -z "$PREFIX" ]] && { _error "generate_test_files PREFIX is required" ; }
     [[ -z "$DATASET_SOURCE_DIR" ]] && { _error "generate_test_files DATASET_SOURCE_DIR is required" ; }
-    mkdir -p "$DIRNAME"
-    while [ $FILE_COUNT -gt 0 ]; do
+    mkdir -p "$DATASET_SOURCE_DIR"
+    while [[ "$FILE_COUNT" -gt 0 ]]; do
         BLOCK_SIZE=1024
         COUNT_BLOCKS=$(( $FILE_SIZE/$BLOCK_SIZE ))
         CMD="dd if=/dev/urandom of="$DATASET_SOURCE_DIR/$PREFIX-$FILE_COUNT" bs=$BLOCK_SIZE count=$COUNT_BLOCKS iflag=fullblock"
-        echo "executing: $CMD"
+        _echo "executing: $CMD"
         $CMD
-        ((FILE_COUNT-=1))
+        ((FILE_COUNT--))
     done
     _echo "Test files created into $DATASET_SOURCE_DIR"
     echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
@@ -45,24 +45,24 @@ function generate_test_files() {
 function generate_test_data() {
     generate_test_files "1" "1024" "$DATA_SOURCE_ROOT"
     [[ -z "$DATASET_NAME" ]] && { _error "DATASET_NAME is required"; }
-    PREP_CAR_CMD="singularity prep create $DATASET_NAME $DATA_SOURCE_ROOT/$DATASET_NAME $DATA_CAR_ROOT/$DATASET_NAME"
-    _echo "Preparing data into car, executing: $PREP_CAR_CMD"
-    $PREP_CAR_CMD
-    _echo "Awaiting prep completion."
-    sleep 5
-    PREP_STATUS=""
-    MAX_SLEEP_SECS=120
-    RETRY_INTERVAL_SECS=10
-    while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
-        MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - $RETRY_INTERVAL_SECS ))
-        if [ $MAX_SLEEP_SECS -le 0 ]; then _error "Timeout waiting for prep success status."; fi
-        sleep $RETRY_INTERVAL_SECS
-        PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
-    done
+    #PREP_CAR_CMD="singularity prep create $DATASET_NAME $DATA_SOURCE_ROOT/$DATASET_NAME $DATA_CAR_ROOT/$DATASET_NAME"
+    #_echo "Preparing data into car, executing: $PREP_CAR_CMD"
+    #$PREP_CAR_CMD
+    #_echo "Awaiting prep completion."
+    #sleep 5
+    #PREP_STATUS=""
+    #MAX_SLEEP_SECS=120
+    #RETRY_INTERVAL_SECS=10
+    #while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
+    #    MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - $RETRY_INTERVAL_SECS ))
+    #    if [ $MAX_SLEEP_SECS -le 0 ]; then _error "Timeout waiting for prep success status."; fi
+    #    sleep $RETRY_INTERVAL_SECS
+    #    PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
+    #done
     # TODO there may be multiple of the following per prep request.
-    export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
-    export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
-    export CAR_FILE=`ls -tr $DATA_CAR_ROOT/*.car | tail -1`
+    #export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
+    #export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
+    #export CAR_FILE=`ls -tr $DATA_CAR_ROOT/*.car | tail -1`
 }
 
 function _prep_test_data() {
@@ -149,10 +149,10 @@ function retrieve_wait() {
 
 function test_singularity_prep() {
     _echo "Testing singularity prep..."
-    export DATA_CAR_ROOT=/tmp/car/$DATASET_NAME
+    DATASET_CAR_ROOT=$DATA_CAR_ROOT/$DATASET_NAME
     DATASET_SOURCE_DIR=/tmp/source/$DATASET_NAME
-    rm -rf $DATA_CAR_ROOT && mkdir -p $DATA_CAR_ROOT
-    SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_SOURCE_DIR $DATA_CAR_ROOT"
+    rm -rf $DATASET_CAR_ROOT && mkdir -p $DATASET_CAR_ROOT
+    SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_SOURCE_DIR $DATASET_CAR_ROOT"
     _echo "Preparing test data via command: $SINGULARITY_CMD"
     $SINGULARITY_CMD
     _echo "Awaiting prep completion."
@@ -170,7 +170,7 @@ function test_singularity_prep() {
     echo "export DATA_CID=$DATA_CID" >> $TEST_CONFIG_FILE
     export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
     echo "export PIECE_CID=$PIECE_CID" >> $TEST_CONFIG_FILE
-    export CAR_FILE=`ls -tr $DATA_CAR_ROOT/*.car | tail -1`
+    export CAR_FILE=`ls -tr $DATASET_CAR_ROOT/*.car | tail -1`
     echo "export CAR_FILE=$CAR_FILE" >> $TEST_CONFIG_FILE
 }
 
@@ -304,15 +304,16 @@ function update_dns_txt_record_route53() {
 function test_singularity_retrieve() {
     setup_singularity_index
     #update_dns_txt_record_route53
-    RETRIEVE_FILE_PATH=/tmp/retrieve/$DATASET_NAME/$DATASET_NAME.dat
-    rm -f $RETRIEVE_FILE_PATH
-    mkdir -p /tmp/retrieve/$DATASET_NAME
+    FILENAME="file-1" # Hardcoded
+    RETRIEVE_FILE_PATH=/tmp/retrieve/$DATASET_NAME
+    rm -rf /tmp/retrieve/$DATASET_NAME && mkdir -p /tmp/retrieve/$DATASET_NAME
     _exec "singularity-retrieve ls -v singularity:/$INDEX_ROOT_IPFS/"
-    _exec "singularity-retrieve ls -v singularity:/$INDEX_ROOT_IPFS/$DATASET_NAME.dat"
-    _exec "singularity-retrieve cp -p $MINERID singularity:/$INDEX_ROOT_IPFS/$DATASET_NAME.dat $RETRIEVE_FILE_PATH"
-    DIFF_CMD="diff $RETRIEVE_FILE_PATH $DATA_SOURCE_ROOT/$DATASET_NAME/$DATASET_NAME.dat"
+    _exec "singularity-retrieve ls -v singularity:/$INDEX_ROOT_IPFS/$FILENAME"
+    _exec "singularity-retrieve cp -p $MINERID singularity:/$INDEX_ROOT_IPFS/$FILENAME $RETRIEVE_FILE_PATH/$FILENAME"
+    DIFF_CMD="diff $RETRIEVE_FILE_PATH/$FILENAME $DATA_SOURCE_ROOT/$DATASET_NAME/$FILENAME"
     _echo "Comparing retrieved against original. Command: $DIFF_CMD"
     $DIFF_CMD || _error "retrieved file differs from original"
+    _echo "test_singularity_retrieve successful"
 }
 
 function test_singularity_retrieve_standalone() {
@@ -326,19 +327,21 @@ function _exec() {
     $CMD
 }
 
+function reset_test_data() {
+    rm -rf $DATA_SOURCE_ROOT/*
+    rm -rf $DATA_CAR_ROOT/*
+    rm -rf $DATA_RETRIEVE_ROOT/*
+}
+
 function test_singularity() {
     _echo "test_singularity starting..."
     . $TEST_CONFIG_FILE
-    generate_test_data ## TODO investigate: hangs here.
-    _echo "FOO after generate_test_data..."
+    reset_test_data
+    generate_test_files "1" "1024" "$DATA_SOURCE_ROOT"
     test_singularity_prep
     test_singularity_repl
-    _echo "test_singularity verify deals..."
     sleep 10
     singularity repl list
-    # Singularity bug. Does not support devnet block height. (workaround in DealReplicationWorker.ts)
-    # error during repl status # deal rejected: invalid deal end epoch 3882897: cannot be more than 1555200 past current epoch 1007
-    # singularity repl status -v REPLACE_WITH_REPL_ID
     lotus client list-deals --show-failed -v
     lotus-miner storage-deals list -v
     lotus-miner sectors list

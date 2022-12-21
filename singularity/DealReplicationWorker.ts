@@ -417,6 +417,7 @@ export default class DealReplicationWorker extends BaseService {
           const startDelay = replicationRequest.startDelay ? replicationRequest.startDelay : 20160;
           const currentHeight_orig = HeightFromCurrentTime();
           // frank-ang: TODO hacky fix for devnet: get actual block height from lotus.
+          // Workaround for Singularity to support devnet block height.
           this.logger.warn("#### TODO HACK: calling lotusBlockHeight... ");
           const currentHeight = await this.lotusBlockHeight();
           this.logger.warn(`#### TODO HACK: Current heights, devnet: ${currentHeight}, mainnet: ${currentHeight_orig}`)

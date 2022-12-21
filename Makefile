@@ -52,10 +52,6 @@ deploy_script:
 	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/filecoin-tools-setup.sh /root/filecoin-data-onboarding-tools/lotus/"
 	scp lotus/filecoin-tools-tests.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/
 	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/filecoin-tools-tests.sh /root/filecoin-data-onboarding-tools/lotus/"
-	scp lotus/gen-test-data.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/
-	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/gen-test-data.sh /root/filecoin-data-onboarding-tools/lotus/"
-	scp singularity/my-singularity-config.toml ubuntu@${AWS_APPLIANCE_IP}:/tmp/
-	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/my-singularity-config.toml /root/filecoin-data-onboarding-tools/singularity/"
 
 connect_boost:
 	@echo "Connecting to boost browser UI at: ${AWS_APPLIANCE_IP}:3000"

@@ -78,5 +78,12 @@ make delete_appliance
 
 * Full rebuild on the running Linux instance.
 ```
-./lotus/setup-filecoin-tools.sh full_rebuild_test
+cd ./lotus
+nohup ./filecoin-tools-setup.sh full_rebuild_test >> /var/log/filecoin-tools-setup.log 2>&1 &
+```
+
+* re-run tests.
+```
+nohup ./filecoin-tools-setup.sh test_singularity >> /var/log/filecoin-tools-setup.test.log 2>&1 &
+
 ```

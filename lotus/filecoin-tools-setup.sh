@@ -64,7 +64,7 @@ function build_lotus() {
 }
 
 function init_daemons() {
-    _echo "Initializing Daemons..."
+    _echo "Initializing lotus daemons..."
     stop_daemons
     rm -rf $LOTUS_PATH
     rm -rf $LOTUS_MINER_PATH
@@ -88,7 +88,7 @@ function init_daemons() {
     _echo "Starting the miner..."
     nohup ./lotus-miner run --nosync >> /var/log/lotus-miner.log 2>&1 &
     lotus-miner wait-api --timeout 900s
-    _echo "Initializing Daemons completed."
+    _echo "Initializing lotus daemons completed."
 }
 
 function deploy_miner_config() {
@@ -176,7 +176,7 @@ function stop_ipfs() {
     _echo "IPFS stopped."
 }
 
-# Setup SP_WALLET_ADDRESS, CLIENT_WALLET_ADDRESS
+# Sets SP_WALLET_ADDRESS, CLIENT_WALLET_ADDRESS
 function setup_wallets() {
     _echo "Setting up wallets..."
     lotus wallet list
@@ -205,12 +205,12 @@ function setup_wallets() {
 function install_singularity() {
     rm -rf $HOME/singularity
     rm -rf $HOME/.singularity
-    _echo "## cloning singularity repo..."
+    _echo "cloning singularity repo..."
     cd $HOME
     git clone https://github.com/tech-greedy/singularity.git
-    _echo "## deploying hacky patch to DealReplicationWorker.ts for devnet blockheight."
+    _echo "deploying hacky patch to DealReplicationWorker.ts for devnet blockheight."
     cp -f filecoin-data-onboarding-tools/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
-    _echo "## building singularity..."
+    _echo "building singularity..."
     cd singularity
     npm ci
     npm run build
@@ -229,29 +229,20 @@ function init_singularity() {
     stop_singularity
     sleep 2
     rm -rf $HOME/.singularity
-    echo "Initializing Singularity..."
+    _echo "Initializing Singularity..."
     singularity init
     ls $HOME/.singularity
-    echo "Setting up config for deal prep only."
     cp $HOME/.singularity/default.toml $HOME/.singularity/default.toml.orig
     cp $HOME/filecoin-data-onboarding-tools/singularity/my-singularity-config.toml $HOME/.singularity/default.toml
 }
 
-function verify_singularity_installation() {
-    _echo "verifying singularity installation, running prep test..."
-    generate_test_data
-    test_singularity_prep
-}
-
-function full_build_test() {
-
+function build {
     setup_ipfs
     start_ipfs
 
     install_singularity
     init_singularity
     start_singularity
-    # verify_singularity_installation # skip, anyway this is broken...
 
     build_lotus
     init_daemons && sleep 10
@@ -261,33 +252,13 @@ function full_build_test() {
     restart_daemons && sleep 2
 
     setup_wallets && sleep 5
+}
 
-    _echo "lotus-miner storage-deals and sectors..."
-    lotus-miner storage-deals list -v
-    lotus-miner sectors list
-
-    #client_lotus_deal && sleep 5   # Test legacy deal.
-
-    #_echo "lotus-miner storage-deals and sectors..."
-    #lotus-miner storage-deals list -v
-    #lotus-miner sectors list
-
-    # Wait some time for deal to seal and appear onchain.
-    #SEAL_SLEEP_SECS=120
-    #_echo "📦 sleeping $SEAL_SLEEP_SECS secs for sealing..." && sleep $SEAL_SLEEP_SECS
-
-    #_echo "lotus-miner storage-deals and sectors..."
-    #lotus-miner storage-deals list -v
-    #lotus-miner sectors list
-
-    #_echo "📦 retrieving CID: $DATA_CID" && retrieve_wait "$DATA_CID"
-    #_echo "comparing source file with retrieved file."
-    #diff -r /tmp/source `pwd`/retrieved.car.gitignore && _echo "comparison succeeded."
-
+function full_build_test() {
+    build
     test_singularity
 }
 
-# Entry point.
 function run() {
     full_build_test
 }
