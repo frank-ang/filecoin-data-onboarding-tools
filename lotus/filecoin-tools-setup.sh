@@ -266,7 +266,7 @@ function full_build_test() {
     lotus-miner storage-deals list -v
     lotus-miner sectors list
 
-    client_lotus_deal && sleep 5   # Legacy deals.
+    client_lotus_deal && sleep 5   # Test legacy deal.
 
     _echo "lotus-miner storage-deals and sectors..."
     lotus-miner storage-deals list -v

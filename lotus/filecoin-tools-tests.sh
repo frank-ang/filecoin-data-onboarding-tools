@@ -24,11 +24,11 @@ function generate_test_files() {
     #_echo "Executing $CMD"
     #$($CMD)
     PREFIX="test"
-    [[ -z "$FILE_COUNT" ]] && { _exit "generate_test_files FILE_COUNT is required"; }
-    [[ -z "$FILE_SIZE" ]] && { _exit "generate_test_files FILE_SIZE bytes is required"; }
-    [[ -z "$PREFIX" ]] && { _exit "generate_test_files PREFIX is required" ; exit 1; }
-    [[ -z "$DIRNAME" ]] && { _exit "generate_test_files DIRNAME is required" ; exit 1; }
     echo "count of files to generate: $FILE_COUNT; size per file (Bytes): $FILE_SIZE; dir: $DIRNAME; prefix: $prefix";
+    [[ -z "$FILE_COUNT" ]] && { _error "generate_test_files FILE_COUNT is required"; }
+    [[ -z "$FILE_SIZE" ]] && { _error "generate_test_files FILE_SIZE bytes is required"; }
+    [[ -z "$PREFIX" ]] && { _error "generate_test_files PREFIX is required" ; exit 1; }
+    [[ -z "$DIRNAME" ]] && { _error "generate_test_files DIRNAME is required" ; exit 1; }
     mkdir -p "$DIRNAME"
     while [ $FILE_COUNT -gt 0 ]; do
         BLOCK_SIZE=1024
@@ -68,10 +68,10 @@ function generate_test_data() {
 }
 
 function _prep_test_data() {
-    _echo "Generating test data..."
+    _echo "_prep_test_data ..."
     rm -rf $DATA_SOURCE_ROOT && mkdir -p $DATA_SOURCE_ROOT
     rm -rf $DATA_CAR_ROOT && mkdir -p $DATA_CAR_ROOT
-    generate_test_files 1 1024
+    generate_test_files "1" "1024" "$DATA_SOURCE_ROOT"
     SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATA_SOURCE_ROOT $DATA_CAR_ROOT"
     _echo "Preparing data via command: $SINGULARITY_CMD"
     $SINGULARITY_CMD
