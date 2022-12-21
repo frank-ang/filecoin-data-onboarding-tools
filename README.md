@@ -82,7 +82,7 @@ cd ./lotus
 nohup ./filecoin-tools-setup.sh full_rebuild_test >> /var/log/filecoin-tools-setup.log 2>&1 &
 ```
 
-* re-run tests.
+* re-run tests only.
 ```
 nohup ./filecoin-tools-setup.sh test_singularity >> /var/log/filecoin-tools-setup.test.log 2>&1 &
 
