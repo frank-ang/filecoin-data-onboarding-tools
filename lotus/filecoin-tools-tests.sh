@@ -15,16 +15,12 @@ GEN_TEST_DATA_SCRIPT=$(dirname $(realpath $0))"/gen-test-data.sh"
 function generate_test_files() {
     FILE_COUNT=${1:-1}
     FILE_SIZE=${2:-1024}
-    DIRNAME=$3
+    DIRNAME=${3:-"$DATA_SOURCE_ROOT"}
     export DATASET_NAME=`uuidgen | cut -d'-' -f1`
     DATASET_SOURCE_DIR=$DIRNAME/$DATASET_NAME
     rm -rf $DATASET_SOURCE_DIR && mkdir -p $DATASET_SOURCE_DIR
-    _echo "Generating test files for dataset: $DATASET_NAME, Files: $FILE_COUNT, Size: $FILE_SIZE, output:$DATASET_SOURCE_DIR"
-    #CMD="$GEN_TEST_DATA_SCRIPT -c $FILE_COUNT -s $FILE_SIZE -p test -d $DATASET_SOURCE_DIR"
-    #_echo "Executing $CMD"
-    #$($CMD)
     PREFIX="file"
-    _echo "count of files to generate: $FILE_COUNT; size per file (Bytes): $FILE_SIZE; dir: $DATASET_SOURCE_DIR; prefix: $PREFIX";
+    _echo "Generating test files for dataset: $DATASET_NAME, Files: $FILE_COUNT, Size: $FILE_SIZE, output:$DATASET_SOURCE_DIR, prefix: $PREFIX"
     [[ -z "$FILE_COUNT" ]] && { _error "generate_test_files FILE_COUNT is required"; }
     [[ -z "$FILE_SIZE" ]] && { _error "generate_test_files FILE_SIZE bytes is required"; }
     [[ -z "$PREFIX" ]] && { _error "generate_test_files PREFIX is required" ; }
@@ -42,30 +38,7 @@ function generate_test_files() {
     echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
 }
 
-function generate_test_data() {
-    generate_test_files "1" "1024" "$DATA_SOURCE_ROOT"
-    [[ -z "$DATASET_NAME" ]] && { _error "DATASET_NAME is required"; }
-    #PREP_CAR_CMD="singularity prep create $DATASET_NAME $DATA_SOURCE_ROOT/$DATASET_NAME $DATA_CAR_ROOT/$DATASET_NAME"
-    #_echo "Preparing data into car, executing: $PREP_CAR_CMD"
-    #$PREP_CAR_CMD
-    #_echo "Awaiting prep completion."
-    #sleep 5
-    #PREP_STATUS=""
-    #MAX_SLEEP_SECS=120
-    #RETRY_INTERVAL_SECS=10
-    #while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
-    #    MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - $RETRY_INTERVAL_SECS ))
-    #    if [ $MAX_SLEEP_SECS -le 0 ]; then _error "Timeout waiting for prep success status."; fi
-    #    sleep $RETRY_INTERVAL_SECS
-    #    PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
-    #done
-    # TODO there may be multiple of the following per prep request.
-    #export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
-    #export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
-    #export CAR_FILE=`ls -tr $DATA_CAR_ROOT/*.car | tail -1`
-}
-
-function _prep_test_data() {
+function _prep_test_data_lotus_deprecated() {
     _echo "_prep_test_data ..."
     rm -rf $DATA_SOURCE_ROOT && mkdir -p $DATA_SOURCE_ROOT
     rm -rf $DATA_CAR_ROOT && mkdir -p $DATA_CAR_ROOT
@@ -92,7 +65,7 @@ function _prep_test_data() {
 
 function client_lotus_deal() {
 
-    _prep_test_data  # Setup DATA_CID, CAR_FILE, DATASET_NAME
+    _prep_test_data_lotus_deprecated  # Setup DATA_CID, CAR_FILE, DATASET_NAME
     if [[ -z "$CLIENT_WALLET_ADDRESS" || -z "$DATA_CID" || -z "$CAR_FILE" || -z "$DATASET_NAME" ]]; then
         _error "CLIENT_WALLET_ADDRESS, DATA_CID, CAR_FILE, DATASET_NAME need to be defined."
     fi
@@ -147,32 +120,111 @@ function retrieve_wait() {
     done
 }
 
-function test_singularity_prep() {
-    _echo "Testing singularity prep..."
+function test_singularity_prep_multi_car() {
+    _echo "Testing singularity prep for multiple car..."
+    DATASET_SOURCE_DIR=$DATA_SOURCE_ROOT/$DATASET_NAME
     DATASET_CAR_ROOT=$DATA_CAR_ROOT/$DATASET_NAME
-    DATASET_SOURCE_DIR=/tmp/source/$DATASET_NAME
     rm -rf $DATASET_CAR_ROOT && mkdir -p $DATASET_CAR_ROOT
-    SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_SOURCE_DIR $DATASET_CAR_ROOT"
+    TARGET_DEAL_SIZE="4KiB" # deafult "32GiB"
+    SINGULARITY_CMD="singularity prep create --deal-size $TARGET_DEAL_SIZE $DATASET_NAME $DATASET_SOURCE_DIR $DATASET_CAR_ROOT"
     _echo "Preparing test data via command: $SINGULARITY_CMD"
     $SINGULARITY_CMD
     _echo "Awaiting prep completion."
     PREP_STATUS="blank"
-    MAX_SLEEP_SECS=10
+    MAX_SLEEP_SECS=120
     while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
         MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - 1 ))
         if [ $MAX_SLEEP_SECS -eq 0 ]; then _error "Timeout waiting for prep completion."; fi
         sleep 1
-        PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
+        PREP_STATUS_LIST=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
+        for p in $PREP_STATUS; do if [[ "$p" != "completed" ]]; then echo "Prep status: $p"; break; fi; done
+        PREP_STATUS="completed"
     done
+    # TODO following variables to fix and handle multi-val.
+    CAR_COUNT=`ls $DATASET_CAR_ROOT/*car | wc -l`
+    ls $DATASET_CAR_ROOT/*car
+    _echo "CAR_COUNT: $CAR_COUNT"
     export DATASET_ID=`singularity prep status --json $DATASET_NAME | jq -r '.id'`
     echo "export DATASET_ID=$DATASET_ID" >> $TEST_CONFIG_FILE
-    export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
+    export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid' | tail -1` # TODO handle multi-value
     echo "export DATA_CID=$DATA_CID" >> $TEST_CONFIG_FILE
-    export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
+    export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid' | tail -1` # TODO handle multi-value
     echo "export PIECE_CID=$PIECE_CID" >> $TEST_CONFIG_FILE
-    export CAR_FILE=`ls -tr $DATASET_CAR_ROOT/*.car | tail -1`
+    export CAR_FILE=`ls -tr $DATASET_CAR_ROOT/*.car | tail -1` # TODO handle multi-val
     echo "export CAR_FILE=$CAR_FILE" >> $TEST_CONFIG_FILE
 }
+
+function test_singularity_prep() {
+    _echo "Testing singularity prep..."
+    DATASET_SOURCE_DIR=$DATA_SOURCE_ROOT/$DATASET_NAME
+    DATASET_CAR_ROOT=$DATA_CAR_ROOT/$DATASET_NAME
+    rm -rf $DATASET_CAR_ROOT && mkdir -p $DATASET_CAR_ROOT
+    TARGET_DEAL_SIZE="4KiB" # deafult "32GiB"
+    SINGULARITY_CMD="singularity prep create --deal-size $TARGET_DEAL_SIZE $DATASET_NAME $DATASET_SOURCE_DIR $DATASET_CAR_ROOT"
+    _echo "Preparing test data via command: $SINGULARITY_CMD"
+    $SINGULARITY_CMD
+    _echo "Awaiting prep completion."
+    PREP_STATUS="blank"
+    MAX_SLEEP_SECS=120
+    while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
+        MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - 1 ))
+        if [ $MAX_SLEEP_SECS -eq 0 ]; then _error "Timeout waiting for prep completion."; fi
+        sleep 1
+        PREP_STATUS_LIST=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
+        for p in $PREP_STATUS; do if [[ "$p" != "completed" ]]; then echo "Prep status: $p"; break; fi; done
+        PREP_STATUS="completed"
+    done
+    CAR_COUNT=`ls $DATASET_CAR_ROOT/*car | wc -l`
+    export DATASET_ID=`singularity prep status --json $DATASET_NAME | jq -r '.id'`
+    echo "export DATASET_ID=$DATASET_ID" >> $TEST_CONFIG_FILE
+    export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid' | tail -1` # TODO handle multi-value
+    echo "export DATA_CID=$DATA_CID" >> $TEST_CONFIG_FILE
+    export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid' | tail -1` # TODO handle multi-value
+    echo "export PIECE_CID=$PIECE_CID" >> $TEST_CONFIG_FILE
+    export CAR_FILE=`ls -tr $DATASET_CAR_ROOT/*.car | tail -1` # TODO handle multi-val
+    echo "export CAR_FILE=$CAR_FILE" >> $TEST_CONFIG_FILE
+}
+
+
+function test_singularity_repl_multi_car() {
+    _echo "Testing singularity replicate with multi car..."
+    _echo "## importing car files into lotus from directory: $DATASET_CAR_ROOT"
+    DATASET_CAR_ROOT=$DATA_CAR_ROOT/$DATASET_NAME
+    ls $DATASET_CAR_ROOT
+    for CAR_FILE in $( ls $DATASET_CAR_ROOT/*.car ); do ## TODO TROUBLEHSOOT
+        echo "CAR_FILE: $CAR_FILE"
+        LOTUS_CLIENT_IMPORT_CAR_CMD="lotus client import --car $CAR_FILE"
+        _echo "Executing command: $LOTUS_CLIENT_IMPORT_CAR_CMD"
+        $LOTUS_CLIENT_IMPORT_CAR_CMD
+    done
+    #LOTUS_CLIENT_IMPORT_CAR_CMD="lotus client import --car $CAR_FILE"
+    #_echo "Executing command: $LOTUS_CLIENT_IMPORT_CAR_CMD"
+    #$LOTUS_CLIENT_IMPORT_CAR_CMD
+
+    unset FULLNODE_API_INFO
+    CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
+    START_DELAY_DAYS=$(( $CURRENT_EPOCH / 2880 + 1 )) # 1 day floor.
+    _echo "CURRENT_EPOCH: $CURRENT_EPOCH , START_DELAY_DAYS: $START_DELAY_DAYS"
+    DURATION_DAYS=180
+    PRICE="953" # TODO hardcoded magic number
+    REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $SINGULARITY_OUT_CSV $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    _echo "Executing replication command: $REPL_CMD"
+    $REPL_CMD
+    sleep 1
+    export REPL_ID=$(singularity repl list | grep $DATASET_ID | sed -n -r 's/^│[[:space:]]+[0-9]+[[:space:]]+│[[:space:]]*'\''([^'\'']*).*/\1/p')
+    _echo "looking up singularity replication ID: $REPL_ID , for dataset ID: $DATASET_ID"
+    REPL_STATUS_JSON=$(singularity repl status -v $REPL_ID)
+    #export DEAL_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dealCid')
+    #export DATA_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dataCid')
+    #export PIECE_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].pieceCid')
+    #echo "export REPL_ID=$REPL_ID" >> $TEST_CONFIG_FILE
+    # TODO: handle the case where 1 replication has many deals.
+    #echo "export DEAL_CID=$DEAL_CID" >> $TEST_CONFIG_FILE
+    #echo "export DATA_CID=$DATA_CID" >> $TEST_CONFIG_FILE
+    #echo "export PIECE_CID=$PIECE_CID" >> $TEST_CONFIG_FILE
+}
+
+
 
 function test_singularity_repl() {
     _echo "Testing singularity replicate..."
@@ -202,9 +254,13 @@ function test_singularity_repl() {
     echo "export PIECE_CID=$PIECE_CID" >> $TEST_CONFIG_FILE
 }
 
+
+
+
 function test_miner_import_car() {
     . $TEST_CONFIG_FILE
     export DATA_CAR_ROOT=/tmp/car/$DATASET_NAME
+    DATASET_CAR_ROOT=$DATA_CAR_ROOT/$DATASET_NAME
     export CAR_FILE=`ls -tr $DATA_CAR_ROOT/*.car | tail -1`
     IMPORT_CMD="lotus-miner storage-deals import-data $DEAL_CID $CAR_FILE"
     _echo "Importing car file into miner...executing: $IMPORT_CMD"
@@ -352,4 +408,11 @@ function test_singularity() {
     test_singularity_retrieve
 
     _echo "test_singularity completed."
+}
+
+function mytest() {
+    . $TEST_CONFIG_FILE
+    generate_test_files 2 4096
+    test_singularity_prep_multi_car
+    test_singularity_repl_multi_car
 }
