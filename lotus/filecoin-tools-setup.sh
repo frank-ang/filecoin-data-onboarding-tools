@@ -1,7 +1,9 @@
 #!/bin/bash
+# Main install/configure script.
+# Also, use this script to invoke test functions.
 # Run as root.
 # E.g. via nohup or tmux:
-#         ./lotus-init-devnet.sh full_rebuild_test > ./full_rebuild_test.out 2>&1 &
+#         ./filecoin-tools-setup.sh full_rebuild_test >> ./full_rebuild_test.out 2>&1 &
 # Build Lotus devnet from source, configure, run devnet
 # Based on: 
 # https://lotus.filecoin.io/lotus/install/linux/#building-from-source
@@ -20,23 +22,21 @@ TEST_CONFIG_FILE="$ROOT_SCRIPT_PATH/lotus/test_config.gitignore"
 LOTUS_MINER_CONFIG_FILE="$ROOT_SCRIPT_PATH/lotus/lotusminer-autopublish-config.toml"
 LOTUS_SOURCE=$HOME/lotus/
 SINGULARITY_OUT_CSV="$ROOT_SCRIPT_PATH/lotus/singularity-out.csv"
-export DATASET_PATH=/tmp/source
-export CAR_DIR=/tmp/car
-export RETRIEVE_CAR_DIR=/tmp/car-retrieve
 
-# set golang envars, because sourcing .bashrc appears not to work in userdata.
+# set golang env vars, because sourcing .bashrc appears not to work in userdata.
 export GOPATH=/root/go
 export GOBIN=$GOPATH/bin
 export GOROOT=/usr/local/go
 export PATH=$PATH:$GOPATH/bin:$GOROOT/bin
+
+# set NVM env vars for Singularity
 export NVM_DIR="$HOME/.nvm"
 . "$NVM_DIR/nvm.sh"
 . "$NVM_DIR/bash_completion"
 export MINERID="t01000"
 
-. "$ROOT_SCRIPT_PATH/lotus/filecoin-tools-common.sh" # import common functions.
-
-. "$ROOT_SCRIPT_PATH/lotus/filecoin-tools-tests.sh" # import test functions.
+. $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
+. $(dirname $(realpath $0))"/filecoin-tools-tests.sh" # import test functions.
 
 function build_lotus() {
     _echo "Rebuilding from source..."
@@ -58,14 +58,13 @@ function build_lotus() {
     git checkout releases
     make clean
     time make 2k
-    date -u
     _echo "## Installing lotus..."
     make install
-    date -u
+    _echo "## Lotus installed complete. Lotus version: "`lotus --version`
 }
 
 function init_daemons() {
-    _echo "Initializing Daemons..."
+    _echo "Initializing lotus daemons..."
     stop_daemons
     rm -rf $LOTUS_PATH
     rm -rf $LOTUS_MINER_PATH
@@ -89,7 +88,7 @@ function init_daemons() {
     _echo "Starting the miner..."
     nohup ./lotus-miner run --nosync >> /var/log/lotus-miner.log 2>&1 &
     lotus-miner wait-api --timeout 900s
-    _echo "Initializing Daemons completed."
+    _echo "Initializing lotus daemons completed."
 }
 
 function deploy_miner_config() {
@@ -115,6 +114,7 @@ function start_daemons() {
     nohup lotus daemon >> /var/log/lotus-daemon.log 2>&1 &
     _waitLotusStartup
     _echo "lotus node started. starting lotus miner..."
+    sleep 5
     nohup lotus-miner run --nosync >> /var/log/lotus-miner.log 2>&1 &
     lotus-miner wait-api --timeout 600s
     _echo "lotus miner started."
@@ -139,7 +139,7 @@ function start_singularity() {
     _echo "Starting singularity daemon..."
     nohup singularity daemon >> /var/log/singularity.log 2>&1 &
     _echo "Awaiting singularity start..."
-    sleep 10
+    sleep 12
     timeout 1m bash -c 'until singularity prep list; do sleep 5; done'
     timeout 30s bash -c 'until singularity repl list; do sleep 5; done'
     _echo "Singularity started."
@@ -157,6 +157,7 @@ function setup_ipfs() {
     wget https://dist.ipfs.tech/kubo/v0.17.0/kubo_v0.17.0_linux-amd64.tar.gz
     tar -xvzf kubo_v0.17.0_linux-amd64.tar.gz
     cd kubo
+    rm -rf $HOME/.ipfs
     bash install.sh
     ipfs --version
     ipfs init --profile server
@@ -175,7 +176,7 @@ function stop_ipfs() {
     _echo "IPFS stopped."
 }
 
-# Setup SP_WALLET_ADDRESS, CLIENT_WALLET_ADDRESS
+# Sets SP_WALLET_ADDRESS, CLIENT_WALLET_ADDRESS
 function setup_wallets() {
     _echo "Setting up wallets..."
     lotus wallet list
@@ -201,79 +202,15 @@ function setup_wallets() {
     _echo "client lotus wallet address: $CLIENT_WALLET_ADDRESS, balance: $CLIENT_WALLET_BALANCE"
 }
 
-function _prep_test_data() {
-    # Generate test data
-    _echo "Generating test data..."
-    export DATASET_NAME=`uuidgen | cut -d'-' -f1`
-    echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
-
-    rm -rf $CAR_DIR && mkdir -p $CAR_DIR
-    rm -rf $DATASET_PATH && mkdir -p $DATASET_PATH
-    dd if=/dev/urandom of="$DATASET_PATH/$DATASET_NAME.dat" bs=1024 count=1 iflag=fullblock
-    export SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATASET_PATH $CAR_DIR"
-    _echo "Preparing data via command: $SINGULARITY_CMD"
-    $SINGULARITY_CMD
-    _echo "Awaiting prep completion."
-    sleep 5
-    PREP_STATUS="blank"
-    MAX_SLEEP_SECS=10
-    while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
-        MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - 1 ))
-        if [ $MAX_SLEEP_SECS -eq 0 ]; then _error "Timeout waiting for prep success status."; fi
-        sleep 1
-        PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
-        _echo "PREP_STATUS: $PREP_STATUS"
-    done
-
-    export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
-    export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
-    export CAR_FILE=`ls -tr $CAR_DIR/*.car | tail -1`
-}
-
-function client_lotus_deal() {
-
-    _prep_test_data  # Setup DATA_CID, CAR_FILE, DATASET_NAME
-    if [[ -z "$CLIENT_WALLET_ADDRESS" || -z "$DATA_CID" || -z "$CAR_FILE" || -z "$DATASET_NAME" ]]; then
-        _error "CLIENT_WALLET_ADDRESS, DATA_CID, CAR_FILE, DATASET_NAME need to be defined."
-    fi
-    _echo "📦📦📦 Making Deals..."
-    _echo "CLIENT_WALLET_ADDRESS, DATA_CID, CAR_FILE, DATASET_NAME: $CLIENT_WALLET_ADDRESS, $DATA_CID, $CAR_FILE, $DATASET_NAME"
-    _echo "Importing CAR into Lotus..."
-    lotus client import --car $CAR_FILE
-    sleep 2
-
-    QUERY_ASK_CMD="lotus client query-ask $MINERID"
-    _echo "Executing: $QUERY_ASK_CMD"
-    QUERY_ASK_OUT=$($QUERY_ASK_CMD)
-    _echo "query-ask response: $QUERY_ASK_OUT"
-
-    # E.g. Price per GiB per 30sec epoch: 0.0000000005 FIL
-    PRICE=0.000000000000001
-    CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
-    SEALING_DELAY_EPOCHS=$(( 60 * 2 )) # seconds
-    START_EPOCH=$(( $CURRENT_EPOCH + $SEALING_DELAY_EPOCHS ))
-    DURATION_EPOCHS=$(( 180 * 2880 )) # 180 days
-    _echo "CURRENT_EPOCH:$CURRENT_EPOCH; START_EPOCH (ignored TODO):$START_EPOCH; SEALING_DELAY_EPOCHS:$SEALING_DELAY_EPOCHS; DURATION_EPOCHS:$DURATION_EPOCHS"
-    # TODO: tune miner config.
-    #  StorageDealError when using switch: --start-epoch $START_EPOCH , possibly caused by autosealing miner config.
-    DEAL_CMD="lotus client deal --from $CLIENT_WALLET_ADDRESS $DATA_CID $MINERID $PRICE $DURATION_EPOCHS"
-    _echo "Client Dealing... executing: $DEAL_CMD"
-    DEAL_ID=`$DEAL_CMD`
-    _echo "DEAL_ID: $DEAL_ID"
-    sleep 2
-    lotus client list-deals --show-failed -v                                                                   
-    lotus client get-deal $DEAL_ID
-}
-
 function install_singularity() {
     rm -rf $HOME/singularity
     rm -rf $HOME/.singularity
-    _echo "## cloning singularity repo..."
+    _echo "cloning singularity repo..."
     cd $HOME
     git clone https://github.com/tech-greedy/singularity.git
-    _echo "## deploying hacky patch to DealReplicationWorker.ts for devnet blockheight."
+    _echo "deploying hacky patch to DealReplicationWorker.ts for devnet blockheight."
     cp -f filecoin-data-onboarding-tools/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
-    _echo "## building singularity..."
+    _echo "building singularity..."
     cd singularity
     npm ci
     npm run build
@@ -288,38 +225,24 @@ function install_singularity() {
     mv -f ./generate-car /root/singularity/node_modules/.bin
 }
 
-function verify_singularity_installation() {
-    _echo "verifying singularity installation, running prep test..."
-    generate_test_data
-    test_singularity_prep
-}
-
 function init_singularity() {
     stop_singularity
     sleep 2
     rm -rf $HOME/.singularity
-    echo "Initializing Singularity..."
+    _echo "Initializing Singularity..."
     singularity init
     ls $HOME/.singularity
-    echo "Setting up config for deal prep only."
     cp $HOME/.singularity/default.toml $HOME/.singularity/default.toml.orig
     cp $HOME/filecoin-data-onboarding-tools/singularity/my-singularity-config.toml $HOME/.singularity/default.toml
-    #echo "Starting singularity daemon..."
-    #nohup singularity daemon 2>&1 >> /var/log/singularity.log &
-    #echo "Started singularity daemon."
-    # Wait for singularity daemon startup.
-    #sleep 10 && singularity prep list
 }
 
-function full_build_test() {
-
+function build {
     setup_ipfs
     start_ipfs
 
     install_singularity
     init_singularity
     start_singularity
-    verify_singularity_installation
 
     build_lotus
     init_daemons && sleep 10
@@ -329,37 +252,17 @@ function full_build_test() {
     restart_daemons && sleep 2
 
     setup_wallets && sleep 5
+}
 
-    _echo "lotus-miner storage-deals and sectors..."
-    lotus-miner storage-deals list -v
-    lotus-miner sectors list
-
-    client_lotus_deal && sleep 5   # Legacy deals.
-
-    _echo "lotus-miner storage-deals and sectors..."
-    lotus-miner storage-deals list -v
-    lotus-miner sectors list
-
-    # Wait some time for deal to seal and appear onchain.
-    SEAL_SLEEP_SECS=$(( 60*2 )) # 2 mins
-    _echo "📦 sleeping $SEAL_SLEEP_SECS secs for sealing..." && sleep $SEAL_SLEEP_SECS
-
-    _echo "lotus-miner storage-deals and sectors..."
-    lotus-miner storage-deals list -v
-    lotus-miner sectors list
-
-    _echo "📦 retrieving CID: $DATA_CID" && retrieve_wait "$DATA_CID"
-    # compare source file with retrieved file.
-    _echo "comparing source file with retrieved file."
-    diff -r /tmp/source `pwd`/retrieved.car.gitignore && _echo "comparison succeeded."
-
+function full_rebuild_test() {
+    build
     test_singularity
 }
 
-# Entry point.
 function run() {
     full_build_test
 }
 
 # Execute function from parameters
+# cd $HOME
 $@
