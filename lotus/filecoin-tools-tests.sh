@@ -10,7 +10,7 @@ export DATA_RETRIEVE_ROOT=/tmp/car-retrieve
 GEN_TEST_DATA_SCRIPT=$(dirname $(realpath $0))"/gen-test-data.sh"
 
 # Creates test data files in subdirectory $DATA_SOURCE_ROOT/$DATASET_NAME/test.dat
-# generates and exports a random DATASET_NAME
+# generates and sets a random DATASET_NAME
 # Params: FILE_COUNT, FILE_SIZE
 function generate_test_files() {
     FILE_COUNT=${1:-1}
@@ -24,16 +24,16 @@ function generate_test_files() {
     #_echo "Executing $CMD"
     #$($CMD)
     PREFIX="test"
-    echo "count of files to generate: $FILE_COUNT; size per file (Bytes): $FILE_SIZE; dir: $DIRNAME; prefix: $prefix";
+    echo "count of files to generate: $FILE_COUNT; size per file (Bytes): $FILE_SIZE; dir: $DATASET_SOURCE_DIR; prefix: $prefix";
     [[ -z "$FILE_COUNT" ]] && { _error "generate_test_files FILE_COUNT is required"; }
     [[ -z "$FILE_SIZE" ]] && { _error "generate_test_files FILE_SIZE bytes is required"; }
-    [[ -z "$PREFIX" ]] && { _error "generate_test_files PREFIX is required" ; exit 1; }
-    [[ -z "$DIRNAME" ]] && { _error "generate_test_files DIRNAME is required" ; exit 1; }
+    [[ -z "$PREFIX" ]] && { _error "generate_test_files PREFIX is required" ; }
+    [[ -z "$DATASET_SOURCE_DIR" ]] && { _error "generate_test_files DATASET_SOURCE_DIR is required" ; }
     mkdir -p "$DIRNAME"
     while [ $FILE_COUNT -gt 0 ]; do
         BLOCK_SIZE=1024
         COUNT_BLOCKS=$(( $FILE_SIZE/$BLOCK_SIZE ))
-        CMD="dd if=/dev/urandom of="$DIRNAME/$PREFIX-$FILE_COUNT" bs=$BLOCK_SIZE count=$COUNT_BLOCKS iflag=fullblock"
+        CMD="dd if=/dev/urandom of="$DATASET_SOURCE_DIR/$PREFIX-$FILE_COUNT" bs=$BLOCK_SIZE count=$COUNT_BLOCKS iflag=fullblock"
         echo "executing: $CMD"
         $CMD
         ((FILE_COUNT-=1))
@@ -41,8 +41,6 @@ function generate_test_files() {
     _echo "Test files created into $DATASET_SOURCE_DIR"
     echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
 }
-
-
 
 function generate_test_data() {
     generate_test_files "1" "1024" "$DATA_SOURCE_ROOT"
@@ -331,7 +329,7 @@ function _exec() {
 function test_singularity() {
     _echo "test_singularity starting..."
     . $TEST_CONFIG_FILE
-    generate_test_data
+    generate_test_data ## TODO investigate: hangs here.
     _echo "FOO after generate_test_data..."
     test_singularity_prep
     test_singularity_repl

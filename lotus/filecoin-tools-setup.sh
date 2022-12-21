@@ -266,24 +266,23 @@ function full_build_test() {
     lotus-miner storage-deals list -v
     lotus-miner sectors list
 
-    client_lotus_deal && sleep 5   # Test legacy deal.
+    #client_lotus_deal && sleep 5   # Test legacy deal.
 
-    _echo "lotus-miner storage-deals and sectors..."
-    lotus-miner storage-deals list -v
-    lotus-miner sectors list
+    #_echo "lotus-miner storage-deals and sectors..."
+    #lotus-miner storage-deals list -v
+    #lotus-miner sectors list
 
     # Wait some time for deal to seal and appear onchain.
-    SEAL_SLEEP_SECS=$(( 60*2 )) # 2 mins
-    _echo "📦 sleeping $SEAL_SLEEP_SECS secs for sealing..." && sleep $SEAL_SLEEP_SECS
+    #SEAL_SLEEP_SECS=120
+    #_echo "📦 sleeping $SEAL_SLEEP_SECS secs for sealing..." && sleep $SEAL_SLEEP_SECS
 
-    _echo "lotus-miner storage-deals and sectors..."
-    lotus-miner storage-deals list -v
-    lotus-miner sectors list
+    #_echo "lotus-miner storage-deals and sectors..."
+    #lotus-miner storage-deals list -v
+    #lotus-miner sectors list
 
-    _echo "📦 retrieving CID: $DATA_CID" && retrieve_wait "$DATA_CID"
-    # compare source file with retrieved file.
-    _echo "comparing source file with retrieved file."
-    diff -r /tmp/source `pwd`/retrieved.car.gitignore && _echo "comparison succeeded."
+    #_echo "📦 retrieving CID: $DATA_CID" && retrieve_wait "$DATA_CID"
+    #_echo "comparing source file with retrieved file."
+    #diff -r /tmp/source `pwd`/retrieved.car.gitignore && _echo "comparison succeeded."
 
     test_singularity
 }
