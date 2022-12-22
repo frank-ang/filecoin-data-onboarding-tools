@@ -253,7 +253,7 @@ function build {
     setup_wallets && sleep 5
 }
 
-function full_rebuild_test() {
+function full_build_test() {
     build
     test_singularity
 }
