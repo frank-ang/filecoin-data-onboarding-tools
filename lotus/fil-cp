@@ -1,0 +1,10 @@
+#!/bin/bash
+. ./test_config.gitignore
+[[ -z "$INDEX_ROOT_CID" ]] && { echo "INDEX_ROOT_CID is required"; exit 1; }
+[[ -z "$1" ]] && { echo "missing source path"; exit 1; }
+[[ -z "$2" ]] && { echo "missing destination path"; exit 1; }
+
+CMD="singularity-retrieve cp -p MINER_ID singularity:/$INDEX_ROOT_CID/$1" "$2"
+echo "$CMD"
+#$CMD
+#singularity-retrieve cp -p t01000 singularity://ipfs/bafyreickrvmevk2auw6nunhkvf3se4ppy5z6ujj5qa6kjpsw2mmlczaeke/file-1 /tmp/retrieve/36ba1b93/

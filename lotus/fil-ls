@@ -1,0 +1,6 @@
+#!/bin/bash
+. ./test_config.gitignore
+[[ -z "$INDEX_ROOT_CID" ]] && { echo "INDEX_ROOT_CID is required"; exit 1; }
+CMD="singularity-retrieve ls -v singularity:/$INDEX_ROOT_CID/$1"
+echo "$CMD"
+$CMD

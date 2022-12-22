@@ -175,7 +175,7 @@ function test_singularity_prep() {
         for p in $PREP_STATUS; do if [[ "$p" != "completed" ]]; then echo "Prep status: $p"; break; fi; done
         PREP_STATUS="completed"
     done
-    CAR_COUNT=`ls $DATASET_CAR_ROOT/*car | wc -l`
+    # CAR_COUNT=`ls $DATASET_CAR_ROOT/*car | wc -l` # at this point, CAR has not yet appeared in this path.
     export DATASET_ID=`singularity prep status --json $DATASET_NAME | jq -r '.id'`
     echo "export DATASET_ID=$DATASET_ID" >> $TEST_CONFIG_FILE
     export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid' | tail -1` # TODO handle multi-value
@@ -407,11 +407,11 @@ function test_singularity() {
     _echo "test_singularity starting..."
     . $TEST_CONFIG_FILE
     reset_test_data
-    generate_test_files "1" "1024" "$DATA_SOURCE_ROOT"
+    generate_test_files "10" "1" # generate_test_files "1" "1024"
     test_singularity_prep
     test_singularity_repl
     sleep 10
-    singularity repl list
+    singularity repl list # troubleshoot with singularity repl status -v
     lotus client list-deals --show-failed -v
     lotus-miner storage-deals list -v
     lotus-miner sectors list
@@ -427,10 +427,17 @@ function test_singularity() {
 function mytest() {
     . $TEST_CONFIG_FILE
     generate_test_files 10 10 # generate_test_files 10 1024
-    test_singularity_prep_multi_car
-    test_singularity_repl_multi_car
-    _echo "sleeping, for miner to receive deal..." && sleep 60
-    test_miner_import_multi_car
-    read -p 'Check that sealing has completed. Then type Enter to proceed to test_singularity_retrieve: ' promptvar
+    test_singularity_prep #test_singularity_prep_multi_car
+    test_singularity_repl #test_singularity_repl_multi_car
+    sleep 10
+    singularity repl list
+    lotus client list-deals --show-failed -v
+    lotus-miner storage-deals list -v
+    lotus-miner sectors list
+    #_echo "sleeping, for miner to receive deal..." && sleep 60
+    #test_miner_import_multi_car
+    test_miner_import_car # error: cannot find deal ID.
+    #read -p 'Check that sealing has completed. Then type Enter to proceed to test_singularity_retrieve: ' promptvar
+    sleep 1
     test_singularity_retrieve
 }
