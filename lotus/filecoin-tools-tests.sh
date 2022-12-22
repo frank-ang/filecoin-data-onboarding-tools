@@ -7,6 +7,7 @@ export DATA_CAR_ROOT=/tmp/car
 export CAR_RETRIEVE_ROOT=/tmp/car-retrieve
 export RETRIEVE_ROOT=/tmp/retrieve
 export SINGULARITY_CSV_ROOT=/tmp/singularity-csv
+TARGET_DEAL_SIZE="2KiB" # devnet. For prod use: "32GiB"
 
 . $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
 GEN_TEST_DATA_SCRIPT=$(dirname $(realpath $0))"/gen-test-data.sh"
@@ -126,7 +127,6 @@ function test_singularity_prep_multi_car() {
     DATASET_SOURCE_DIR=$DATA_SOURCE_ROOT/$DATASET_NAME
     DATASET_CAR_ROOT=$DATA_CAR_ROOT/$DATASET_NAME
     rm -rf $DATASET_CAR_ROOT && mkdir -p $DATASET_CAR_ROOT
-    TARGET_DEAL_SIZE="4KiB" # deafult "32GiB"
     SINGULARITY_CMD="singularity prep create --deal-size $TARGET_DEAL_SIZE $DATASET_NAME $DATASET_SOURCE_DIR $DATASET_CAR_ROOT"
     _echo "Preparing test data via command: $SINGULARITY_CMD"
     $SINGULARITY_CMD
@@ -160,7 +160,6 @@ function test_singularity_prep() {
     DATASET_SOURCE_DIR=$DATA_SOURCE_ROOT/$DATASET_NAME
     DATASET_CAR_ROOT=$DATA_CAR_ROOT/$DATASET_NAME
     rm -rf $DATASET_CAR_ROOT && mkdir -p $DATASET_CAR_ROOT
-    TARGET_DEAL_SIZE="4KiB" # deafult "32GiB"
     SINGULARITY_CMD="singularity prep create --deal-size $TARGET_DEAL_SIZE $DATASET_NAME $DATASET_SOURCE_DIR $DATASET_CAR_ROOT"
     _echo "Preparing test data via command: $SINGULARITY_CMD"
     $SINGULARITY_CMD
