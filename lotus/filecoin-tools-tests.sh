@@ -291,11 +291,12 @@ function test_miner_import_car() {
         _echo "DEAL_STATUS: $DEAL_STATUS"
     done
 
-    LOTUS_GET_DEAL_CMD="lotus client get-deal $DEAL_CID | "
-    _echo "Querying lotus client deal status. Executing: $LOTUS_GET_DEAL_CMD"
-    $LOTUS_GET_DEAL_CMD # shows "OnChain", and "Log": "deal activated",
+    #LOTUS_GET_DEAL_CMD="lotus client get-deal $DEAL_CID | "
+    #_echo "Querying lotus client deal status. Executing: $LOTUS_GET_DEAL_CMD"
+    #$LOTUS_GET_DEAL_CMD # shows "OnChain", and "Log": "deal activated",
 
-    SINGULARITY_DEAL_STATUS_MD="singularity repl status -v $REPL_ID"
+    #SINGULARITY_DEAL_STATUS_MD="singularity repl status -v $REPL_ID"
+    SINGULARITY_DEAL_STATUS_MD="singularity repl status -v $REPL_ID | jq  '.deals[] | ._id,.state,.errorMessage'"
     _echo "Querying singularity client deal status. Executing: $SINGULARITY_DEAL_STATUS_MD"
     $SINGULARITY_DEAL_STATUS_MD # somehow state remains in proposed... whats the refresh frequency of singularity ? retry later?
 }
@@ -406,7 +407,7 @@ function test_singularity() {
     _echo "test_singularity starting..."
     . $TEST_CONFIG_FILE
     reset_test_data
-    generate_test_files "10" "1" # generate_test_files "1" "1024"
+    generate_test_files "10" "1" # "5" "512" failed? # generate_test_files "1" "1024"
     test_singularity_prep
     test_singularity_repl
     sleep 10
