@@ -40,7 +40,6 @@ export MINERID="t01000"
 function build_lotus() {
     _echo "Rebuilding from source..."
     stop_daemons
-
     _echo "## Installing prereqs..."
     apt install -y mesa-opencl-icd ocl-icd-opencl-dev gcc git bzr jq pkg-config curl clang build-essential hwloc libhwloc-dev wget && sudo apt upgrade -y
     curl https://sh.rustup.rs -sSf > RUSTUP.sh
@@ -151,6 +150,40 @@ function stop_singularity() {
     sleep 1
 }
 
+function install_singularity() {
+    rm -rf $HOME/singularity
+    rm -rf $HOME/.singularity
+    _echo "cloning singularity repo..."
+    cd $HOME
+    git clone https://github.com/tech-greedy/singularity.git
+    _echo "deploying hacky patch to DealReplicationWorker.ts for devnet blockheight."
+    cp -f filecoin-data-onboarding-tools/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
+    _echo "building singularity..."
+    cd singularity
+    npm ci
+    npm run build
+    npm link
+    npx singularity -V
+    _echo "Installing go-generate-car dependency..."
+    cd $HOME
+    rm -rf go-generate-car
+    git clone https://github.com/tech-greedy/go-generate-car.git
+    cd go-generate-car
+    make
+    mv -f ./generate-car /root/singularity/node_modules/.bin
+}
+
+function init_singularity() {
+    stop_singularity
+    sleep 2
+    rm -rf $HOME/.singularity
+    _echo "Initializing Singularity..."
+    singularity init
+    ls $HOME/.singularity
+    cp $HOME/.singularity/default.toml $HOME/.singularity/default.toml.orig
+    cp $HOME/filecoin-data-onboarding-tools/singularity/my-singularity-config.toml $HOME/.singularity/default.toml
+}
+
 function setup_ipfs() {
     _echo "setting up IPFS..."
     wget https://dist.ipfs.tech/kubo/v0.17.0/kubo_v0.17.0_linux-amd64.tar.gz
@@ -190,7 +223,7 @@ function setup_wallets() {
     fi
     CLIENT_WALLET_ADDRESS=`lotus wallet list | tail -2 | head -1 | cut -d' ' -f1`
     _echo "client lotus wallet address: $CLIENT_WALLET_ADDRESS"
-    rm $TEST_CONFIG_FILE || true
+    rm -f $TEST_CONFIG_FILE
     echo "export SP_WALLET_ADDRESS=$SP_WALLET_ADDRESS" >> $TEST_CONFIG_FILE
     echo "export CLIENT_WALLET_ADDRESS=$CLIENT_WALLET_ADDRESS" >> $TEST_CONFIG_FILE
 
@@ -199,40 +232,6 @@ function setup_wallets() {
     sleep 2
     CLIENT_WALLET_BALANCE=`lotus wallet balance "$CLIENT_WALLET_ADDRESS" | cut -d' ' -f1`
     _echo "client lotus wallet address: $CLIENT_WALLET_ADDRESS, balance: $CLIENT_WALLET_BALANCE"
-}
-
-function install_singularity() {
-    rm -rf $HOME/singularity
-    rm -rf $HOME/.singularity
-    _echo "cloning singularity repo..."
-    cd $HOME
-    git clone https://github.com/tech-greedy/singularity.git
-    _echo "deploying hacky patch to DealReplicationWorker.ts for devnet blockheight."
-    cp -f filecoin-data-onboarding-tools/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
-    _echo "building singularity..."
-    cd singularity
-    npm ci
-    npm run build
-    npm link
-    npx singularity -V
-    _echo "Installing go-generate-car dependency..."
-    cd $HOME
-    rm -rf go-generate-car
-    git clone https://github.com/tech-greedy/go-generate-car.git
-    cd go-generate-car
-    make
-    mv -f ./generate-car /root/singularity/node_modules/.bin
-}
-
-function init_singularity() {
-    stop_singularity
-    sleep 2
-    rm -rf $HOME/.singularity
-    _echo "Initializing Singularity..."
-    singularity init
-    ls $HOME/.singularity
-    cp $HOME/.singularity/default.toml $HOME/.singularity/default.toml.orig
-    cp $HOME/filecoin-data-onboarding-tools/singularity/my-singularity-config.toml $HOME/.singularity/default.toml
 }
 
 function build {

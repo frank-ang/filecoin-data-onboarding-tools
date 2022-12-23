@@ -11,6 +11,7 @@ TARGET_DEAL_SIZE="2KiB" # devnet. For prod use: "32GiB"
 
 . $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
 GEN_TEST_DATA_SCRIPT=$(dirname $(realpath $0))"/gen-test-data.sh"
+MINER_IMPORT_SCRIPT=$(dirname $(realpath $0))"/miner-import-car.sh"
 
 # Retries a command on failure. Increasing backoff interval.
 # $1 - the max number of attempts
@@ -69,7 +70,7 @@ function generate_test_files() {
 }
 
 
-function test_singularity_prep_multi_car() {
+function test_singularity_prep() {
     _echo "Testing singularity prep for multiple car..."
     DATASET_SOURCE_DIR=$DATA_SOURCE_ROOT/$DATASET_NAME
     DATASET_CAR_ROOT=$DATA_CAR_ROOT/$DATASET_NAME
@@ -105,7 +106,7 @@ function test_singularity_prep_multi_car() {
 }
 
 
-function test_singularity_repl_multi_car() {
+function test_singularity_repl() {
     _echo "Testing singularity replicate with multi car..."
     DATASET_CAR_ROOT=$DATA_CAR_ROOT/$DATASET_NAME
     _echo "## importing car files into lotus from directory: $DATASET_CAR_ROOT"
@@ -209,10 +210,10 @@ function wait_singularity_manifest() {
 }
 
 
-function test_miner_import_multi_car() {
+function test_miner_import() {
     . $TEST_CONFIG_FILE
     CSV_PATH=$(realpath $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv | head -1 ) # TODO handle >1 csv files?
-    CMD="./miner-import-car.sh $CSV_PATH /tmp/car/$DATASET_NAME"
+    CMD="$MINER_IMPORT_SCRIPT $CSV_PATH /tmp/car/$DATASET_NAME"
     _echo "[importing]: $CMD" 
     $CMD
     _echo "CAR files imported into miner."
@@ -255,17 +256,6 @@ function update_dns_txt_record_route53() {
     _echo "DNS should update after TTL expiry. You can verify with command: $QUERY_DNS_TXT_RECORD_CMD"
 }
 
-function retrieve() {
-    CID=$1
-    if [[ -z "$CID" ]]; then
-        _echo "CID undefined." 1>&2
-        exit 1
-    fi
-    _echo "Retrieving CID: $CID"
-    rm -rf `pwd`/retrieved-out.gitignore || true
-    lotus client retrieve --provider t01000 $CID `pwd`/retrieved.car.gitignore
-}
-
 
 function test_singularity_retrieve() {
     #update_dns_txt_record_route53
@@ -286,7 +276,6 @@ function test_singularity_retrieve_standalone() {
     test_singularity_retrieve
 }
 
-
 function retrieve_wait() {
     CID=$1
     RETRY_COUNT=60
@@ -298,6 +287,16 @@ function retrieve_wait() {
     done
 }
 
+function retrieve() {
+    CID=$1
+    if [[ -z "$CID" ]]; then
+        _echo "CID undefined." 1>&2
+        exit 1
+    fi
+    _echo "Retrieving CID: $CID"
+    rm -rf `pwd`/retrieved-out.gitignore || true
+    lotus client retrieve --provider t01000 $CID `pwd`/retrieved.car.gitignore
+}
 
 function reset_test_data() {
     rm -rf $DATA_SOURCE_ROOT/*
@@ -318,11 +317,11 @@ function test_singularity() {
     . $TEST_CONFIG_FILE
     reset_test_data
     generate_test_files "100" "1024" # "10" "1" ok # "5" "512" failed? # generate_test_files "1" "1024"
-    test_singularity_prep_multi_car
-    test_singularity_repl_multi_car
+    test_singularity_prep
+    test_singularity_repl
     wait_singularity_manifest
     wait_miner_receive_all_deals
-    test_miner_import_multi_car
+    test_miner_import
     wait_seal_all_deals
     sleep 1
     setup_singularity_index

@@ -84,6 +84,6 @@ nohup ./filecoin-tools-setup.sh full_rebuild_test >> /var/log/filecoin-tools-set
 
 * re-run tests only.
 ```
-nohup ./filecoin-tools-setup.sh test_singularity >> /var/log/filecoin-tools-setup.test.log 2>&1 &
+nohup ./filecoin-tools-setup.sh test_singularity >> test_singularity.log 2>&1 &
 
 ```
