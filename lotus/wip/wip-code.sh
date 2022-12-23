@@ -188,4 +188,122 @@ function do_docker() {
     docker_boost_build
     docker_boost_run
 }
-# --- end parking lot ---
+# --- end boost parking lot ---
+
+# --- start lotus client deal parking lot ---
+
+function _prep_test_data_lotus_deprecated() {
+    _echo "_prep_test_data ..."
+    rm -rf $DATA_SOURCE_ROOT && mkdir -p $DATA_SOURCE_ROOT
+    rm -rf $DATA_CAR_ROOT && mkdir -p $DATA_CAR_ROOT
+    generate_test_files "1" "1024" "$DATA_SOURCE_ROOT"
+    SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATA_SOURCE_ROOT $DATA_CAR_ROOT"
+    _echo "Preparing data via command: $SINGULARITY_CMD"
+    $SINGULARITY_CMD
+    _echo "Awaiting prep completion."
+    sleep 5
+    PREP_STATUS="blank"
+    MAX_SLEEP_SECS=10
+    while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
+        MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - 1 ))
+        if [ $MAX_SLEEP_SECS -eq 0 ]; then _error "Timeout waiting for prep success status."; fi
+        sleep 1
+        PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
+        _echo "PREP_STATUS: $PREP_STATUS"
+    done
+    export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
+    export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
+    export CAR_FILE=`ls -tr $DATA_CAR_ROOT/*.car | tail -1`
+}
+
+function client_lotus_deal() {
+
+    _prep_test_data_lotus_deprecated  # Setup DATA_CID, CAR_FILE, DATASET_NAME
+    if [[ -z "$CLIENT_WALLET_ADDRESS" || -z "$DATA_CID" || -z "$CAR_FILE" || -z "$DATASET_NAME" ]]; then
+        _error "CLIENT_WALLET_ADDRESS, DATA_CID, CAR_FILE, DATASET_NAME need to be defined."
+    fi
+    _echo "📦📦📦 Making Deals..."
+    _echo "CLIENT_WALLET_ADDRESS, DATA_CID, CAR_FILE, DATASET_NAME: $CLIENT_WALLET_ADDRESS, $DATA_CID, $CAR_FILE, $DATASET_NAME"
+    _echo "Importing CAR into Lotus..."
+    lotus client import --car $CAR_FILE
+    sleep 2
+
+    QUERY_ASK_CMD="lotus client query-ask $MINERID"
+    _echo "Executing: $QUERY_ASK_CMD"
+    QUERY_ASK_OUT=$($QUERY_ASK_CMD)
+    _echo "query-ask response: $QUERY_ASK_OUT"
+
+    # E.g. Price per GiB per 30sec epoch: 0.0000000005 FIL
+    PRICE=0.000000000000001
+    CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
+    SEALING_DELAY_EPOCHS=$(( 60 * 2 )) # seconds
+    START_EPOCH=$(( $CURRENT_EPOCH + $SEALING_DELAY_EPOCHS ))
+    DURATION_EPOCHS=$(( 180 * 2880 )) # 180 days
+    _echo "CURRENT_EPOCH:$CURRENT_EPOCH; START_EPOCH (ignored TODO):$START_EPOCH; SEALING_DELAY_EPOCHS:$SEALING_DELAY_EPOCHS; DURATION_EPOCHS:$DURATION_EPOCHS"
+    # TODO: tune miner config.
+    #  StorageDealError when using switch: --start-epoch $START_EPOCH , possibly caused by autosealing miner config.
+    DEAL_CMD="lotus client deal --from $CLIENT_WALLET_ADDRESS $DATA_CID $MINERID $PRICE $DURATION_EPOCHS"
+    _echo "Client Dealing... executing: $DEAL_CMD"
+    DEAL_ID=`$DEAL_CMD`
+    _echo "DEAL_ID: $DEAL_ID"
+    sleep 2
+    lotus client list-deals --show-failed -v                                                                   
+    lotus client get-deal $DEAL_ID
+}
+
+# --- end lotus client deal parking lot ---
+
+
+# ----- DEPRECATED stuff here ------
+
+
+function test_miner_import_car_deprecated() {
+    . $TEST_CONFIG_FILE
+    export DATA_CAR_ROOT=/tmp/car/$DATASET_NAME
+    export CAR_FILE=`ls -tr $DATA_CAR_ROOT/*.car | tail -1` # only handles 1 file.
+    IMPORT_CMD="lotus-miner storage-deals import-data $DEAL_CID $CAR_FILE"
+    _echo "Importing car file into miner...executing: $IMPORT_CMD"
+    $IMPORT_CMD
+    _echo "CAR file imported. Awaiting miner sealing..."
+    DEAL_STATUS="blank"
+    MAX_POLL_SECS=600
+    SLEEP_INTERVAL=10
+    _echo "Waiting for deal status to go StorageDealActive..."
+    while [[ "$DEAL_STATUS" != "StorageDealActive" && $MAX_POLL_RETRY -ge 0 ]]; do
+        MAX_POLL_SECS=$(( $MAX_POLL_SECS - $SLEEP_INTERVAL ))
+        if [ $MAX_POLL_SECS -eq 0 ]; then _error "Timeout exceeded $MAX_POLL_SECS seconds waiting for prep deal status to go StorageDealActive."; fi
+        sleep $SLEEP_INTERVAL
+        DEAL_STATUS=$( lotus-miner storage-deals list -v | grep $DEAL_CID | tr -s ' ' | cut -d ' ' -f7 )
+        _echo "DEAL_STATUS: $DEAL_STATUS"
+    done
+
+    #LOTUS_GET_DEAL_CMD="lotus client get-deal $DEAL_CID | "
+    #_echo "Querying lotus client deal status. Executing: $LOTUS_GET_DEAL_CMD"
+    #$LOTUS_GET_DEAL_CMD # shows "OnChain", and "Log": "deal activated",
+
+    #SINGULARITY_DEAL_STATUS_MD="singularity repl status -v $REPL_ID"
+    SINGULARITY_DEAL_STATUS_MD="singularity repl status -v $REPL_ID | jq  '.deals[] | ._id,.state,.errorMessage'"
+    _echo "Querying singularity client deal status. Executing: $SINGULARITY_DEAL_STATUS_MD"
+    $SINGULARITY_DEAL_STATUS_MD # somehow state remains in proposed... whats the refresh frequency of singularity ? retry later?
+}
+
+function test_lotus_retrieve() {
+    . $TEST_CONFIG_FILE
+    _echo "testing lotus retrieve for DATASET_NAME: $DATASET_NAME"
+    RETRIEVE_CAR_FILE="$CAR_RETRIEVE_ROOT/$DATASET_NAME/retrieved.car"
+    rm -rf "$CAR_RETRIEVE_ROOT/$DATASET_NAME"
+    mkdir -p "$CAR_RETRIEVE_ROOT/$DATASET_NAME"
+    lotus_retrieve_car $DATA_CID $RETRIEVE_CAR_FILE
+    SOURCE_CAR_FILE="$DATA_CAR_ROOT/$PIECE_CID.car"
+    DIFF_CMD="diff $RETRIEVE_CAR_FILE $SOURCE_CAR_FILE"
+    _echo "comparing retrieved against original: $DIFF_CMD"
+    $DIFF_CMD || _error "retrieved file differs from original"
+}
+
+function lotus_retrieve_car() {
+    DATA_CID=$1
+    RETRIEVE_CAR_FILE=$2
+    LOTUS_RETRIEVE_CMD="lotus client retrieve --car --provider $MINERID $DATA_CID $RETRIEVE_CAR_FILE"
+    _echo "executing command: $LOTUS_RETRIEVE_CMD"
+    $LOTUS_RETRIEVE_CMD
+}

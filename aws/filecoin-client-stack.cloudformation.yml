@@ -144,8 +144,8 @@ Resources:
           cd ./filecoin-data-onboarding-tools && git fetch && git switch test
           
           echo "## Installing Ubuntu prereqs required by Filecoin client tools."
-          cd $HOME/filecoin-data-onboarding-tools/aws/
-          ./filecoin-ubuntu-prereqs.sh run >> /var/log/filecoin-ubuntu-prereqs.log 2>&1
+          cd /tmp
+          $HOME/filecoin-data-onboarding-tools/aws/filecoin-ubuntu-prereqs.sh run >> /var/log/filecoin-ubuntu-prereqs.log 2>&1
 
           echo "## Setting up Filecoin client tools (background)..."
           cd $HOME/filecoin-data-onboarding-tools/lotus

@@ -7,12 +7,18 @@ if [[ -z "$HOME" ]]; then
 fi
 
 function _echo() {
-    echo `date -u +"%Y-%m-%dT%H:%M:%SZ"`"##:$1"
+    echo `date -u +"%Y-%m-%dT%H:%M:%SZ"`"#$1"
 }
 
 function _error() {
     _echo "ERROR: $1"
     exit 1
+}
+
+function _exec() {
+    CMD=$@
+    _echo "executing: $CMD"
+    $CMD
 }
 
 # increase limits for Singularity

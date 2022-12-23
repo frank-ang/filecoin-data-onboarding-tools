@@ -46,7 +46,6 @@ function install_golang() {
     go version
     go install github.com/filecoin-project/go-fil-commp-hashhash/cmd/stream-commp@latest
     echo "## which stream-commp:"`which stream-commp`
-
 }
 
 function run() {
