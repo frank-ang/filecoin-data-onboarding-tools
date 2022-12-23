@@ -119,14 +119,11 @@ function test_singularity_repl() {
     DURATION_DAYS=180
     PRICE="953" # TODO hardcoded magic number
     CSV_DIR="$SINGULARITY_CSV_ROOT/$DATASET_NAME"
-    # i.e. send 10 deals each hour for up to 1000 deals in total with up to 100 pending deals.
-
-    REPL_CMD_SCHEDULED="singularity repl start --max-deals 2 --cron-schedule '0 * * * *' --cron-max-deals 200 --cron-max-pending-deals 4 \
-                        --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --verified false --price $PRICE \
-                        --output-csv $CSV_DIR $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
-    REPL_CMD_IMMEDIATE_DEPRECATED="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $CSV_DIR $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    REPL_CMD_IMMEDIATE_DEPRECATED="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS \
+        --max-deals 10 --verified false --price $PRICE --output-csv $CSV_DIR $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    # i.e. send max-deals each cron period, max total cron-max-deals, with cron-max-pending-deals total pending.
     set -x
-    singularity repl start --max-deals 2 --cron-schedule '*/2 * * * *' --cron-max-deals 200 --cron-max-pending-deals 4 \
+    singularity repl start --max-deals 2 --cron-schedule '*/2 * * * *' --cron-max-deals 200 --cron-max-pending-deals 2 \
                         --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --verified false --price $PRICE \
                         --output-csv $CSV_DIR $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS
     set +x
@@ -143,12 +140,16 @@ function wait_singularity_manifest() {
     echo "waiting for manifest csv file at: $SINGULARITY_CSV_ROOT/$DATASET_NAME"
     MAX_POLL_SECS=1200
     CUR_SECS=0
-    SLEEP_INTERVAL=10
+    SLEEP_INTERVAL=20
     while [[ $CUR_SECS -le $MAX_POLL_SECS ]]; do
         if ls $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv; then break; fi
         sleep $SLEEP_INTERVAL
         CUR_SECS=$((CUR_SECS+SLEEP_INTERVAL))
     done
+    if [[ $CUR_SECS -ge $MAX_POLL_SECS ]]; then
+        _error "timeout while waiting for Singularity CSV manifest."
+    fi
+    _echo "found singularity manifest file: "`ls $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv`
 }
 
 
@@ -211,7 +212,7 @@ function wait_seal_deal() {
     DEAL_CID=$1
     [[ -z "$DEAL_CID" ]] && { echo "DEAL_CID is required"; exit 1; }
     DEAL_STATUS="invalid"
-    MAX_POLL_SECS=600
+    MAX_POLL_SECS=1200
     SLEEP_INTERVAL=20
     _echo "Waiting for sealing of deal: $DEAL_CID"
     while [[ "$DEAL_STATUS" != "StorageDealActive" && $MAX_POLL_RETRY -ge 0 ]]; do
@@ -330,4 +331,17 @@ function test_singularity() {
     setup_singularity_index
     retry 5 test_singularity_retrieve
     _echo "test_singularity completed."
+}
+
+
+function exercise_api() {
+    . $TEST_CONFIG_FILE
+    set -x
+    curl http://localhost:7001/preparations | jq
+    curl http://localhost:7004/replications | jq
+    curl http://localhost:7004/replications | jq '.[] | select(.id == "'$REPL_ID'")'
+    #  jq -r ".ResourceRecordSets[] | select(.Name == \"$TXT_RECORD_NAME\") | .ResourceRecords[].Value")
+    curl http://localhost:7004/replication/:$REPL_ID | jq '.'
+
+    set +x
 }

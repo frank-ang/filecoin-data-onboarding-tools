@@ -15,5 +15,11 @@ function _error() {
     exit 1
 }
 
+function _exec() {
+    CMD=$@
+    _echo "executing: $CMD"
+    $CMD
+}
+
 # increase limits for Singularity
 ulimit -n 100000
