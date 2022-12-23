@@ -397,34 +397,31 @@ function reset_test_data() {
     rm -rf $CAR_RETRIEVE_ROOT/*
 }
 
+function dump_deal_info() {
+    singularity repl list
+    singularity repl status -v $REPL_ID
+    lotus client list-deals --show-failed -v
+    lotus-miner storage-deals list -v
+    lotus-miner sectors list
+}
+
 function test_singularity() {
     _echo "test_singularity starting..."
     . $TEST_CONFIG_FILE
     reset_test_data
     generate_test_files "10" "1" # "5" "512" failed? # generate_test_files "1" "1024"
-    test_singularity_prep
-    test_singularity_repl
-    sleep 10
-    singularity repl list # troubleshoot with singularity repl status -v
-    lotus client list-deals --show-failed -v
-    lotus-miner storage-deals list -v
-    lotus-miner sectors list
-    _echo "sleeping, for miner to receive deal..." && sleep 60
-    test_miner_import_car
+    test_singularity_prep_multi_car
+    test_singularity_repl_multi_car
+    wait_singularity_manifest
+    wait_miner_receive_all_deals
+    test_miner_import_multi_car
     sleep 1
-    test_lotus_retrieve
+    test_lotus_retrieve # car file retrieval
     setup_singularity_index
     test_singularity_retrieve
-
     _echo "test_singularity completed."
 }
 
-function dump_deal_info() {
-    singularity repl list
-    lotus client list-deals --show-failed -v
-    lotus-miner storage-deals list -v
-    lotus-miner sectors list
-}
 
 # nohup ./filecoin-tools-setup.sh mytest >> mytest.log.0 2>&1 &
 function mytest() {
