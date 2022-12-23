@@ -253,3 +253,57 @@ function client_lotus_deal() {
 
 # --- end lotus client deal parking lot ---
 
+
+# ----- DEPRECATED stuff here ------
+
+
+function test_miner_import_car_deprecated() {
+    . $TEST_CONFIG_FILE
+    export DATA_CAR_ROOT=/tmp/car/$DATASET_NAME
+    export CAR_FILE=`ls -tr $DATA_CAR_ROOT/*.car | tail -1` # only handles 1 file.
+    IMPORT_CMD="lotus-miner storage-deals import-data $DEAL_CID $CAR_FILE"
+    _echo "Importing car file into miner...executing: $IMPORT_CMD"
+    $IMPORT_CMD
+    _echo "CAR file imported. Awaiting miner sealing..."
+    DEAL_STATUS="blank"
+    MAX_POLL_SECS=600
+    SLEEP_INTERVAL=10
+    _echo "Waiting for deal status to go StorageDealActive..."
+    while [[ "$DEAL_STATUS" != "StorageDealActive" && $MAX_POLL_RETRY -ge 0 ]]; do
+        MAX_POLL_SECS=$(( $MAX_POLL_SECS - $SLEEP_INTERVAL ))
+        if [ $MAX_POLL_SECS -eq 0 ]; then _error "Timeout exceeded $MAX_POLL_SECS seconds waiting for prep deal status to go StorageDealActive."; fi
+        sleep $SLEEP_INTERVAL
+        DEAL_STATUS=$( lotus-miner storage-deals list -v | grep $DEAL_CID | tr -s ' ' | cut -d ' ' -f7 )
+        _echo "DEAL_STATUS: $DEAL_STATUS"
+    done
+
+    #LOTUS_GET_DEAL_CMD="lotus client get-deal $DEAL_CID | "
+    #_echo "Querying lotus client deal status. Executing: $LOTUS_GET_DEAL_CMD"
+    #$LOTUS_GET_DEAL_CMD # shows "OnChain", and "Log": "deal activated",
+
+    #SINGULARITY_DEAL_STATUS_MD="singularity repl status -v $REPL_ID"
+    SINGULARITY_DEAL_STATUS_MD="singularity repl status -v $REPL_ID | jq  '.deals[] | ._id,.state,.errorMessage'"
+    _echo "Querying singularity client deal status. Executing: $SINGULARITY_DEAL_STATUS_MD"
+    $SINGULARITY_DEAL_STATUS_MD # somehow state remains in proposed... whats the refresh frequency of singularity ? retry later?
+}
+
+function test_lotus_retrieve() {
+    . $TEST_CONFIG_FILE
+    _echo "testing lotus retrieve for DATASET_NAME: $DATASET_NAME"
+    RETRIEVE_CAR_FILE="$CAR_RETRIEVE_ROOT/$DATASET_NAME/retrieved.car"
+    rm -rf "$CAR_RETRIEVE_ROOT/$DATASET_NAME"
+    mkdir -p "$CAR_RETRIEVE_ROOT/$DATASET_NAME"
+    lotus_retrieve_car $DATA_CID $RETRIEVE_CAR_FILE
+    SOURCE_CAR_FILE="$DATA_CAR_ROOT/$PIECE_CID.car"
+    DIFF_CMD="diff $RETRIEVE_CAR_FILE $SOURCE_CAR_FILE"
+    _echo "comparing retrieved against original: $DIFF_CMD"
+    $DIFF_CMD || _error "retrieved file differs from original"
+}
+
+function lotus_retrieve_car() {
+    DATA_CID=$1
+    RETRIEVE_CAR_FILE=$2
+    LOTUS_RETRIEVE_CMD="lotus client retrieve --car --provider $MINERID $DATA_CID $RETRIEVE_CAR_FILE"
+    _echo "executing command: $LOTUS_RETRIEVE_CMD"
+    $LOTUS_RETRIEVE_CMD
+}

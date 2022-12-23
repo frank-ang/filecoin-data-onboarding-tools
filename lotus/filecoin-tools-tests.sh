@@ -12,6 +12,33 @@ TARGET_DEAL_SIZE="2KiB" # devnet. For prod use: "32GiB"
 . $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
 GEN_TEST_DATA_SCRIPT=$(dirname $(realpath $0))"/gen-test-data.sh"
 
+# Retries a command on failure. Increasing backoff interval.
+# $1 - the max number of attempts
+# $2... - the command to run
+# example:
+#   retry 5 ls -ltr foo
+function retry() {
+    local -r -i max_attempts="$1"; shift
+    local -r cmd="$@"
+    local -i attempt_num=1
+    until $cmd
+    do
+        if (( attempt_num == max_attempts ))
+        then
+            _error "exceeded $attempt_num retries executing: $cmd"
+        else
+            echo "Attempt $attempt_num failed. Trying again in $attempt_num seconds..."
+            sleep $(( attempt_num++ ))
+        fi
+    done
+}
+
+function _exec() {
+    CMD=$@
+    _echo "executing: $CMD"
+    $CMD
+}
+
 # Creates test data files with pattern: $DATA_SOURCE_ROOT/$DATASET_NAME/file-$FILE_COUNT
 # generates and sets a random DATASET_NAME
 # Params: FILE_COUNT, FILE_SIZE
@@ -41,27 +68,6 @@ function generate_test_files() {
     echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
 }
 
-function retrieve() {
-    CID=$1
-    if [[ -z "$CID" ]]; then
-        _echo "CID undefined." 1>&2
-        exit 1
-    fi
-    _echo "Retrieving CID: $CID"
-    rm -rf `pwd`/retrieved-out.gitignore || true
-    lotus client retrieve --provider t01000 $CID `pwd`/retrieved.car.gitignore
-}
-
-function retrieve_wait() {
-    CID=$1
-    RETRY_COUNT=60
-    until retrieve $CID; do
-        RETRY_COUNT=$((RETRY_COUNT-1))
-        if [[ "$RETRY_COUNT" < 1 ]]; then _error "Exhausted retries"; fi
-        _echo "RETRY_COUNT: $RETRY_COUNT"
-        sleep 60
-    done
-}
 
 function test_singularity_prep_multi_car() {
     _echo "Testing singularity prep for multiple car..."
@@ -88,36 +94,6 @@ function test_singularity_prep_multi_car() {
     CAR_COUNT=`ls $DATASET_CAR_ROOT/*car | wc -l`
     ls $DATASET_CAR_ROOT/*car
     _echo "CAR_COUNT: $CAR_COUNT"
-    export DATASET_ID=`singularity prep status --json $DATASET_NAME | jq -r '.id'`
-    echo "export DATASET_ID=$DATASET_ID" >> $TEST_CONFIG_FILE
-    export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid' | tail -1` # TODO handle multi-value
-    echo "export DATA_CID=$DATA_CID" >> $TEST_CONFIG_FILE
-    export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid' | tail -1` # TODO handle multi-value
-    echo "export PIECE_CID=$PIECE_CID" >> $TEST_CONFIG_FILE
-    export CAR_FILE=`ls -tr $DATASET_CAR_ROOT/*.car | tail -1` # TODO handle multi-val
-    echo "export CAR_FILE=$CAR_FILE" >> $TEST_CONFIG_FILE
-}
-
-function test_singularity_prep() {
-    _echo "Testing singularity prep..."
-    DATASET_SOURCE_DIR=$DATA_SOURCE_ROOT/$DATASET_NAME
-    DATASET_CAR_ROOT=$DATA_CAR_ROOT/$DATASET_NAME
-    rm -rf $DATASET_CAR_ROOT && mkdir -p $DATASET_CAR_ROOT
-    SINGULARITY_CMD="singularity prep create --deal-size $TARGET_DEAL_SIZE $DATASET_NAME $DATASET_SOURCE_DIR $DATASET_CAR_ROOT"
-    _echo "Preparing test data via command: $SINGULARITY_CMD"
-    $SINGULARITY_CMD
-    _echo "Awaiting prep completion..." && sleep 5
-    PREP_STATUS="blank"
-    MAX_SLEEP_SECS=120
-    while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
-        MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - 1 ))
-        if [ $MAX_SLEEP_SECS -eq 0 ]; then _error "Timeout waiting for prep completion."; fi
-        sleep 1
-        PREP_STATUS_LIST=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
-        for p in $PREP_STATUS; do if [[ "$p" != "completed" ]]; then echo "Prep status: $p"; break; fi; done
-        PREP_STATUS="completed"
-    done
-    # CAR_COUNT=`ls $DATASET_CAR_ROOT/*car | wc -l` # at this point, CAR has not yet appeared in this path.
     export DATASET_ID=`singularity prep status --json $DATASET_NAME | jq -r '.id'`
     echo "export DATASET_ID=$DATASET_ID" >> $TEST_CONFIG_FILE
     export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid' | tail -1` # TODO handle multi-value
@@ -156,42 +132,6 @@ function test_singularity_repl_multi_car() {
     REPL_STATUS_JSON=$(singularity repl status -v $REPL_ID)
     echo "export REPL_ID=$REPL_ID" >> $TEST_CONFIG_FILE
     _echo "REPL_STATUS_JSON: $REPL_STATUS_JSON"
-    #export DEAL_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dealCid') # multi-value
-    #echo "export DEAL_CID=$DEAL_CID" >> $TEST_CONFIG_FILE
-    #export DATA_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dataCid') # multi-value
-    #echo "export DATA_CID=$DATA_CID" >> $TEST_CONFIG_FILE
-    #_echo "REPL_ID=$REPL_ID ; DEAL_CID=$DEAL_CID ; DATA_CID=$DATA_CID"
-    #export PIECE_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].pieceCid')
-    # TODO: handle the case where 1 replication has many deals.
-    #echo "export PIECE_CID=$PIECE_CID" >> $TEST_CONFIG_FILE
-}
-
-function test_singularity_repl() {
-    _echo "Testing singularity replicate..."
-    LOTUS_CLIENT_IMPORT_CAR_CMD="lotus client import --car $CAR_FILE"
-    _echo "Executing command: $LOTUS_CLIENT_IMPORT_CAR_CMD"
-    $LOTUS_CLIENT_IMPORT_CAR_CMD
-    unset FULLNODE_API_INFO
-    CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
-    START_DELAY_DAYS=$(( $CURRENT_EPOCH / 2880 + 1 )) # 1 day floor.
-    _echo "CURRENT_EPOCH: $CURRENT_EPOCH , START_DELAY_DAYS: $START_DELAY_DAYS"
-    DURATION_DAYS=180
-    PRICE="953"
-    REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $SINGULARITY_CSV_ROOT/$DATASET_NAME $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
-    _echo "Executing replication command: $REPL_CMD" 
-    $REPL_CMD
-    sleep 1
-    export REPL_ID=$(singularity repl list | grep $DATASET_ID | sed -n -r 's/^│[[:space:]]+[0-9]+[[:space:]]+│[[:space:]]*'\''([^'\'']*).*/\1/p')
-    _echo "looking up singularity replication ID: $REPL_ID , for dataset ID: $DATASET_ID"
-    REPL_STATUS_JSON=$(singularity repl status -v $REPL_ID)
-    export DEAL_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dealCid')
-    export DATA_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dataCid')
-    export PIECE_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].pieceCid')
-    echo "export REPL_ID=$REPL_ID" >> $TEST_CONFIG_FILE
-    # TODO: handle the case where 1 replication has many deals?
-    echo "export DEAL_CID=$DEAL_CID" >> $TEST_CONFIG_FILE
-    echo "export DATA_CID=$DATA_CID" >> $TEST_CONFIG_FILE
-    echo "export PIECE_CID=$PIECE_CID" >> $TEST_CONFIG_FILE
 }
 
 function wait_seal_all_deals() {
@@ -213,14 +153,14 @@ function wait_seal_deal() {
     [[ -z "$DEAL_CID" ]] && { echo "DEAL_CID is required"; exit 1; }
     DEAL_STATUS="invalid"
     MAX_POLL_SECS=600
-    SLEEP_INTERVAL=10
-    _echo "Waiting for sealing of deal $DEAL_CID"
+    SLEEP_INTERVAL=20
+    _echo "Waiting for sealing of deal: $DEAL_CID"
     while [[ "$DEAL_STATUS" != "StorageDealActive" && $MAX_POLL_RETRY -ge 0 ]]; do
         MAX_POLL_SECS=$(( $MAX_POLL_SECS - $SLEEP_INTERVAL ))
         if [ $MAX_POLL_SECS -eq 0 ]; then _error "Timeout exceeded $MAX_POLL_SECS seconds waiting for prep deal status to go StorageDealActive."; fi
         DEAL_STATUS=$( lotus-miner storage-deals list -v | grep $DEAL_CID | tr -s ' ' | cut -d ' ' -f7 )
         _echo "deal:$DEAL_CID , status:$DEAL_STATUS"
-        if [ "$DEAL_STATUS" == "StorageDealActive" ]; then break; fi
+        if [ "$DEAL_STATUS" == "StorageDealActive" ]; then _echo "Sealed deal: $DEAL_CID" && break; fi
         sleep $SLEEP_INTERVAL
     done
 }
@@ -278,57 +218,6 @@ function test_miner_import_multi_car() {
     _echo "CAR files imported into miner."
 }
 
-function test_miner_import_car() {
-    . $TEST_CONFIG_FILE
-    export DATA_CAR_ROOT=/tmp/car/$DATASET_NAME
-    export CAR_FILE=`ls -tr $DATA_CAR_ROOT/*.car | tail -1` # TODO only handles 1 file.
-    IMPORT_CMD="lotus-miner storage-deals import-data $DEAL_CID $CAR_FILE"
-    _echo "Importing car file into miner...executing: $IMPORT_CMD"
-    $IMPORT_CMD
-    _echo "CAR file imported. Awaiting miner sealing..."
-    DEAL_STATUS="blank"
-    MAX_POLL_SECS=600
-    SLEEP_INTERVAL=10
-    _echo "Waiting for deal status to go StorageDealActive..."
-    while [[ "$DEAL_STATUS" != "StorageDealActive" && $MAX_POLL_RETRY -ge 0 ]]; do
-        MAX_POLL_SECS=$(( $MAX_POLL_SECS - $SLEEP_INTERVAL ))
-        if [ $MAX_POLL_SECS -eq 0 ]; then _error "Timeout exceeded $MAX_POLL_SECS seconds waiting for prep deal status to go StorageDealActive."; fi
-        sleep $SLEEP_INTERVAL
-        DEAL_STATUS=$( lotus-miner storage-deals list -v | grep $DEAL_CID | tr -s ' ' | cut -d ' ' -f7 )
-        _echo "DEAL_STATUS: $DEAL_STATUS"
-    done
-
-    #LOTUS_GET_DEAL_CMD="lotus client get-deal $DEAL_CID | "
-    #_echo "Querying lotus client deal status. Executing: $LOTUS_GET_DEAL_CMD"
-    #$LOTUS_GET_DEAL_CMD # shows "OnChain", and "Log": "deal activated",
-
-    #SINGULARITY_DEAL_STATUS_MD="singularity repl status -v $REPL_ID"
-    SINGULARITY_DEAL_STATUS_MD="singularity repl status -v $REPL_ID | jq  '.deals[] | ._id,.state,.errorMessage'"
-    _echo "Querying singularity client deal status. Executing: $SINGULARITY_DEAL_STATUS_MD"
-    $SINGULARITY_DEAL_STATUS_MD # somehow state remains in proposed... whats the refresh frequency of singularity ? retry later?
-}
-
-function test_lotus_retrieve() {
-    . $TEST_CONFIG_FILE
-    _echo "testing lotus retrieve for DATASET_NAME: $DATASET_NAME"
-    RETRIEVE_CAR_FILE="$CAR_RETRIEVE_ROOT/$DATASET_NAME/retrieved.car"
-    rm -rf "$CAR_RETRIEVE_ROOT/$DATASET_NAME"
-    mkdir -p "$CAR_RETRIEVE_ROOT/$DATASET_NAME"
-    lotus_retrieve $DATA_CID $RETRIEVE_CAR_FILE
-    SOURCE_CAR_FILE="$DATA_CAR_ROOT/$PIECE_CID.car"
-    DIFF_CMD="diff $RETRIEVE_CAR_FILE $SOURCE_CAR_FILE"
-    _echo "comparing retrieved against original: $DIFF_CMD"
-    $DIFF_CMD || _error "retrieved file differs from original"
-}
-
-function lotus_retrieve() {
-    DATA_CID=$1
-    RETRIEVE_CAR_FILE=$2
-    LOTUS_RETRIEVE_CMD="lotus client retrieve --car --provider $MINERID $DATA_CID $RETRIEVE_CAR_FILE"
-    _echo "executing command: $LOTUS_RETRIEVE_CMD"
-    $LOTUS_RETRIEVE_CMD
-}
-
 function setup_singularity_index() {
     INDEX_MAX_LINKS=1000
     INDEX_MAX_NODES=100
@@ -366,6 +255,18 @@ function update_dns_txt_record_route53() {
     _echo "DNS should update after TTL expiry. You can verify with command: $QUERY_DNS_TXT_RECORD_CMD"
 }
 
+function retrieve() {
+    CID=$1
+    if [[ -z "$CID" ]]; then
+        _echo "CID undefined." 1>&2
+        exit 1
+    fi
+    _echo "Retrieving CID: $CID"
+    rm -rf `pwd`/retrieved-out.gitignore || true
+    lotus client retrieve --provider t01000 $CID `pwd`/retrieved.car.gitignore
+}
+
+
 function test_singularity_retrieve() {
     #update_dns_txt_record_route53
     FILENAME="file-1" # Hardcoded
@@ -385,11 +286,18 @@ function test_singularity_retrieve_standalone() {
     test_singularity_retrieve
 }
 
-function _exec() {
-    CMD=$@
-    _echo "executing: $CMD"
-    $CMD
+
+function retrieve_wait() {
+    CID=$1
+    RETRY_COUNT=60
+    until retrieve $CID; do
+        RETRY_COUNT=$((RETRY_COUNT-1))
+        if [[ "$RETRY_COUNT" < 1 ]]; then _error "Exhausted retries"; fi
+        _echo "RETRY_COUNT: $RETRY_COUNT"
+        sleep 60
+    done
 }
+
 
 function reset_test_data() {
     rm -rf $DATA_SOURCE_ROOT/*
@@ -409,35 +317,15 @@ function test_singularity() {
     _echo "test_singularity starting..."
     . $TEST_CONFIG_FILE
     reset_test_data
-    generate_test_files "10" "1" # "5" "512" failed? # generate_test_files "1" "1024"
+    generate_test_files "100" "1024" # "10" "1" ok # "5" "512" failed? # generate_test_files "1" "1024"
     test_singularity_prep_multi_car
     test_singularity_repl_multi_car
     wait_singularity_manifest
     wait_miner_receive_all_deals
-    test_miner_import_multi_car
-    sleep 1
-    test_lotus_retrieve # car file retrieval
-    setup_singularity_index
-    test_singularity_retrieve
-    _echo "test_singularity completed."
-}
-
-
-# nohup ./filecoin-tools-setup.sh mytest >> mytest.log.0 2>&1 &
-function mytest() {
-    . $TEST_CONFIG_FILE
-    generate_test_files 3 1024
-    # generate_test_files 10 1024 # FAILED. data doesn't fit in a sector, 2125 Bytes
-    # generate_test_files 10 1 # small 
-    test_singularity_prep_multi_car
-    test_singularity_repl_multi_car
-    _echo "sleeping a bit for miner to receive deals..." && sleep 31
-    wait_singularity_manifest
-    wait_miner_receive_all_deals
-    _echo "sleeping before importing cars..." && sleep 10 # TODO what is the wait condition?
     test_miner_import_multi_car
     wait_seal_all_deals
     sleep 1
     setup_singularity_index
-    test_singularity_retrieve
+    retry 5 test_singularity_retrieve
+    _echo "test_singularity completed."
 }
