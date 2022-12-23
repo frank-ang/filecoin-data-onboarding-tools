@@ -34,11 +34,6 @@ function retry() {
     done
 }
 
-function _exec() {
-    CMD=$@
-    _echo "executing: $CMD"
-    $CMD
-}
 
 # Creates test data files with pattern: $DATA_SOURCE_ROOT/$DATASET_NAME/file-$FILE_COUNT
 # generates and sets a random DATASET_NAME
@@ -81,7 +76,7 @@ function test_singularity_prep() {
     $SINGULARITY_CMD
     _echo "Awaiting prep completion." && sleep 2
     PREP_STATUS="blank"
-    MAX_SLEEP_SECS=120
+    MAX_SLEEP_SECS=240
     while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
         MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - 1 ))
         if [ $MAX_SLEEP_SECS -eq 0 ]; then _error "Timeout waiting for prep completion."; fi
@@ -124,16 +119,79 @@ function test_singularity_repl() {
     DURATION_DAYS=180
     PRICE="953" # TODO hardcoded magic number
     CSV_DIR="$SINGULARITY_CSV_ROOT/$DATASET_NAME"
-    REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $CSV_DIR $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
-    _echo "Executing replication command: $REPL_CMD"
-    $REPL_CMD
+    # i.e. send 10 deals each hour for up to 1000 deals in total with up to 100 pending deals.
+
+    REPL_CMD_SCHEDULED="singularity repl start --max-deals 2 --cron-schedule '0 * * * *' --cron-max-deals 200 --cron-max-pending-deals 4 \
+                        --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --verified false --price $PRICE \
+                        --output-csv $CSV_DIR $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    REPL_CMD_IMMEDIATE_DEPRECATED="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $CSV_DIR $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
+    set -x
+    singularity repl start --max-deals 2 --cron-schedule '*/2 * * * *' --cron-max-deals 200 --cron-max-pending-deals 4 \
+                        --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --verified false --price $PRICE \
+                        --output-csv $CSV_DIR $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS
+    set +x
     sleep 1
     export REPL_ID=$(singularity repl list | grep $DATASET_ID | sed -n -r 's/^│[[:space:]]+[0-9]+[[:space:]]+│[[:space:]]*'\''([^'\'']*).*/\1/p')
     _echo "Singularity replication ID: $REPL_ID , for dataset ID: $DATASET_ID"
     REPL_STATUS_JSON=$(singularity repl status -v $REPL_ID)
     echo "export REPL_ID=$REPL_ID" >> $TEST_CONFIG_FILE
-    _echo "REPL_STATUS_JSON: $REPL_STATUS_JSON"
+    _echo "replication status: $REPL_STATUS_JSON"
 }
+
+
+function wait_singularity_manifest() {
+    echo "waiting for manifest csv file at: $SINGULARITY_CSV_ROOT/$DATASET_NAME"
+    MAX_POLL_SECS=1200
+    CUR_SECS=0
+    SLEEP_INTERVAL=10
+    while [[ $CUR_SECS -le $MAX_POLL_SECS ]]; do
+        if ls $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv; then break; fi
+        sleep $SLEEP_INTERVAL
+        CUR_SECS=$((CUR_SECS+SLEEP_INTERVAL))
+    done
+}
+
+
+function wait_miner_receive_all_deals() {
+    _echo "Waiting for miner to receive all deals. please be patient."
+    MANIFEST_CSV_FILENAME=$(ls $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv | tail -1 )
+    {
+        read
+        while IFS=, read -r miner_id deal_cid filename data_cid piece_cid start_epoch full_url
+        do
+            wait_miner_receive_deal $deal_cid
+        done
+    } < $MANIFEST_CSV_FILENAME
+    _echo "all deals received."
+}
+
+function wait_miner_receive_deal() {
+    DEAL_CID=$1
+    [[ -z "$DEAL_CID" ]] && { echo "DEAL_CID is required"; exit 1; }
+    DEAL_STATUS="invalid"
+    MAX_POLL_SECS=600
+    SLEEP_INTERVAL=10
+    _echo "Waiting for miner to receive deal: $DEAL_CID"
+    while [[ "$DEAL_STATUS" != "StorageDealWaitingForData" && $MAX_POLL_RETRY -ge 0 ]]; do
+        MAX_POLL_SECS=$(( $MAX_POLL_SECS - $SLEEP_INTERVAL ))
+        if [ $MAX_POLL_SECS -eq 0 ]; then _error "Timeout exceeded waiting for miner to receive deal: $DEAL_CID."; fi
+        DEAL_STATUS=$( lotus-miner storage-deals list -v | grep $DEAL_CID | tr -s ' ' | cut -d ' ' -f7 )
+        _echo "Deal:$DEAL_CID , status:$DEAL_STATUS"
+        if [[ "$DEAL_STATUS" == "StorageDealWaitingForData" || "$DEAL_STATUS" == "StorageDealActive" ]]; then break; fi
+        sleep $SLEEP_INTERVAL
+    done
+}
+
+
+function test_miner_import() {
+    . $TEST_CONFIG_FILE
+    CSV_PATH=$(realpath $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv | head -1 ) # TODO handle >1 csv files?
+    CMD="$MINER_IMPORT_SCRIPT $CSV_PATH /tmp/car/$DATASET_NAME"
+    _echo "[importing]: $CMD" 
+    $CMD
+    _echo "CAR files imported into miner."
+}
+
 
 function wait_seal_all_deals() {
     _echo "waiting for deals to seal on miner."
@@ -142,7 +200,7 @@ function wait_seal_all_deals() {
     {
         read
         while IFS=, read -r miner_id deal_cid filename data_cid piece_cid start_epoch full_url
-        do 
+        do
             wait_seal_deal $deal_cid
         done
     } < $MANIFEST_CSV_FILENAME
@@ -166,58 +224,6 @@ function wait_seal_deal() {
     done
 }
 
-
-function wait_miner_receive_all_deals() {
-    _echo "waiting for miner to receive all deals."
-    MANIFEST_CSV_FILENAME=$(ls $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv | tail -1 )
-    {
-        read
-        while IFS=, read -r miner_id deal_cid filename data_cid piece_cid start_epoch full_url
-        do
-            wait_miner_receive_deal $deal_cid
-        done
-    } < $MANIFEST_CSV_FILENAME
-    _echo "all deals received."
-}
-
-function wait_miner_receive_deal() {
-    DEAL_CID=$1
-    [[ -z "$DEAL_CID" ]] && { echo "DEAL_CID is required"; exit 1; }
-    DEAL_STATUS="invalid"
-    MAX_POLL_SECS=600
-    SLEEP_INTERVAL=10
-    _echo "Waiting for miner to receive deal: $DEAL_CID"
-    while [[ "$DEAL_STATUS" != "StorageDealWaitingForData" && $MAX_POLL_RETRY -ge 0 ]]; do
-        MAX_POLL_SECS=$(( $MAX_POLL_SECS - $SLEEP_INTERVAL ))
-        if [ $MAX_POLL_SECS -eq 0 ]; then _error "Timeout exceeded $MAX_POLL_SECS seconds waiting for miner to receive deal: $DEAL_CID."; fi
-        DEAL_STATUS=$( lotus-miner storage-deals list -v | grep $DEAL_CID | tr -s ' ' | cut -d ' ' -f7 )
-        _echo "Deal:$DEAL_CID , status:$DEAL_STATUS"
-        if [[ "$DEAL_STATUS" == "StorageDealWaitingForData" || "$DEAL_STATUS" == "StorageDealActive" ]]; then break; fi
-        sleep $SLEEP_INTERVAL
-    done
-}
-
-function wait_singularity_manifest() {
-    echo "waiting for manifest csv file at: $SINGULARITY_CSV_ROOT/$DATASET_NAME"
-    MAX_POLL_SECS=600
-    CUR_SECS=0
-    SLEEP_INTERVAL=10
-    while [[ $CUR_SECS -le $MAX_POLL_SECS ]]; do
-        if ls $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv; then break; fi
-        sleep $SLEEP_INTERVAL
-        CUR_SECS=$((CUR_SECS+SLEEP_INTERVAL))
-    done
-}
-
-
-function test_miner_import() {
-    . $TEST_CONFIG_FILE
-    CSV_PATH=$(realpath $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv | head -1 ) # TODO handle >1 csv files?
-    CMD="$MINER_IMPORT_SCRIPT $CSV_PATH /tmp/car/$DATASET_NAME"
-    _echo "[importing]: $CMD" 
-    $CMD
-    _echo "CAR files imported into miner."
-}
 
 function setup_singularity_index() {
     INDEX_MAX_LINKS=1000
@@ -271,11 +277,6 @@ function test_singularity_retrieve() {
     _echo "test_singularity_retrieve successful"
 }
 
-function test_singularity_retrieve_standalone() {
-    . $TEST_CONFIG_FILE
-    test_singularity_retrieve
-}
-
 function retrieve_wait() {
     CID=$1
     RETRY_COUNT=60
@@ -298,6 +299,7 @@ function retrieve() {
     lotus client retrieve --provider t01000 $CID `pwd`/retrieved.car.gitignore
 }
 
+
 function reset_test_data() {
     rm -rf $DATA_SOURCE_ROOT/*
     rm -rf $DATA_CAR_ROOT/*
@@ -312,11 +314,12 @@ function dump_deal_info() {
     lotus-miner sectors list
 }
 
+
 function test_singularity() {
     _echo "test_singularity starting..."
     . $TEST_CONFIG_FILE
     reset_test_data
-    generate_test_files "100" "1024" # "10" "1" ok # "5" "512" failed? # generate_test_files "1" "1024"
+    generate_test_files "10" "1024" # "10" "1" ok # "5" "512" failed? # generate_test_files "1" "1024"
     test_singularity_prep
     test_singularity_repl
     wait_singularity_manifest

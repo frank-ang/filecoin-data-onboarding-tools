@@ -84,6 +84,7 @@ nohup ./filecoin-tools-setup.sh full_rebuild_test >> /var/log/filecoin-tools-set
 
 * re-run tests only.
 ```
+cd $HOME/filecoin-data-onboarding-tools/lotus
 nohup ./filecoin-tools-setup.sh test_singularity >> test_singularity.log 2>&1 &
 
 ```

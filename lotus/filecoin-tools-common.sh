@@ -7,7 +7,7 @@ if [[ -z "$HOME" ]]; then
 fi
 
 function _echo() {
-    echo `date -u +"%Y-%m-%dT%H:%M:%SZ"`"##:$1"
+    echo `date -u +"%Y-%m-%dT%H:%M:%SZ"`"#$1"
 }
 
 function _error() {
