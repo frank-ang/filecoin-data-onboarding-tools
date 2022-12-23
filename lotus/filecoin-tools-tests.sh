@@ -30,7 +30,7 @@ function generate_test_files() {
     [[ -z "$DATASET_SOURCE_DIR" ]] && { _error "generate_test_files DATASET_SOURCE_DIR is required" ; }
     mkdir -p "$DATASET_SOURCE_DIR"
     while [[ "$FILE_COUNT" -gt 0 ]]; do
-        BLOCK_SIZE=$(( $FILE_SIZE < 1024 ? 1 : 1024 ))
+        BLOCK_SIZE=1 # $(( $FILE_SIZE < 1024 ? 1 : 1024 ))
         COUNT_BLOCKS=$(( $FILE_SIZE/$BLOCK_SIZE ))
         CMD="dd if=/dev/urandom of="$DATASET_SOURCE_DIR/$PREFIX-$FILE_COUNT" bs=$BLOCK_SIZE count=$COUNT_BLOCKS iflag=fullblock"
         _echo "executing: $CMD"
@@ -39,65 +39,6 @@ function generate_test_files() {
     done
     _echo "Test files created into $DATASET_SOURCE_DIR"
     echo "export DATASET_NAME=$DATASET_NAME" >> $TEST_CONFIG_FILE
-}
-
-function _prep_test_data_lotus_deprecated() {
-    _echo "_prep_test_data ..."
-    rm -rf $DATA_SOURCE_ROOT && mkdir -p $DATA_SOURCE_ROOT
-    rm -rf $DATA_CAR_ROOT && mkdir -p $DATA_CAR_ROOT
-    generate_test_files "1" "1024" "$DATA_SOURCE_ROOT"
-    SINGULARITY_CMD="singularity prep create $DATASET_NAME $DATA_SOURCE_ROOT $DATA_CAR_ROOT"
-    _echo "Preparing data via command: $SINGULARITY_CMD"
-    $SINGULARITY_CMD
-    _echo "Awaiting prep completion."
-    sleep 5
-    PREP_STATUS="blank"
-    MAX_SLEEP_SECS=10
-    while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
-        MAX_SLEEP_SECS=$(( $MAX_SLEEP_SECS - 1 ))
-        if [ $MAX_SLEEP_SECS -eq 0 ]; then _error "Timeout waiting for prep success status."; fi
-        sleep 1
-        PREP_STATUS=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].status'`
-        _echo "PREP_STATUS: $PREP_STATUS"
-    done
-    export DATA_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].dataCid'`
-    export PIECE_CID=`singularity prep status --json $DATASET_NAME | jq -r '.generationRequests[].pieceCid'`
-    export CAR_FILE=`ls -tr $DATA_CAR_ROOT/*.car | tail -1`
-}
-
-function client_lotus_deal() {
-
-    _prep_test_data_lotus_deprecated  # Setup DATA_CID, CAR_FILE, DATASET_NAME
-    if [[ -z "$CLIENT_WALLET_ADDRESS" || -z "$DATA_CID" || -z "$CAR_FILE" || -z "$DATASET_NAME" ]]; then
-        _error "CLIENT_WALLET_ADDRESS, DATA_CID, CAR_FILE, DATASET_NAME need to be defined."
-    fi
-    _echo "📦📦📦 Making Deals..."
-    _echo "CLIENT_WALLET_ADDRESS, DATA_CID, CAR_FILE, DATASET_NAME: $CLIENT_WALLET_ADDRESS, $DATA_CID, $CAR_FILE, $DATASET_NAME"
-    _echo "Importing CAR into Lotus..."
-    lotus client import --car $CAR_FILE
-    sleep 2
-
-    QUERY_ASK_CMD="lotus client query-ask $MINERID"
-    _echo "Executing: $QUERY_ASK_CMD"
-    QUERY_ASK_OUT=$($QUERY_ASK_CMD)
-    _echo "query-ask response: $QUERY_ASK_OUT"
-
-    # E.g. Price per GiB per 30sec epoch: 0.0000000005 FIL
-    PRICE=0.000000000000001
-    CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
-    SEALING_DELAY_EPOCHS=$(( 60 * 2 )) # seconds
-    START_EPOCH=$(( $CURRENT_EPOCH + $SEALING_DELAY_EPOCHS ))
-    DURATION_EPOCHS=$(( 180 * 2880 )) # 180 days
-    _echo "CURRENT_EPOCH:$CURRENT_EPOCH; START_EPOCH (ignored TODO):$START_EPOCH; SEALING_DELAY_EPOCHS:$SEALING_DELAY_EPOCHS; DURATION_EPOCHS:$DURATION_EPOCHS"
-    # TODO: tune miner config.
-    #  StorageDealError when using switch: --start-epoch $START_EPOCH , possibly caused by autosealing miner config.
-    DEAL_CMD="lotus client deal --from $CLIENT_WALLET_ADDRESS $DATA_CID $MINERID $PRICE $DURATION_EPOCHS"
-    _echo "Client Dealing... executing: $DEAL_CMD"
-    DEAL_ID=`$DEAL_CMD`
-    _echo "DEAL_ID: $DEAL_ID"
-    sleep 2
-    lotus client list-deals --show-failed -v                                                                   
-    lotus client get-deal $DEAL_ID
 }
 
 function retrieve() {
@@ -127,10 +68,11 @@ function test_singularity_prep_multi_car() {
     DATASET_SOURCE_DIR=$DATA_SOURCE_ROOT/$DATASET_NAME
     DATASET_CAR_ROOT=$DATA_CAR_ROOT/$DATASET_NAME
     rm -rf $DATASET_CAR_ROOT && mkdir -p $DATASET_CAR_ROOT
-    SINGULARITY_CMD="singularity prep create --deal-size $TARGET_DEAL_SIZE $DATASET_NAME $DATASET_SOURCE_DIR $DATASET_CAR_ROOT"
+    MAX_RATIO="0.80"
+    SINGULARITY_CMD="singularity prep create --deal-size $TARGET_DEAL_SIZE --max-ratio $MAX_RATIO $DATASET_NAME $DATASET_SOURCE_DIR $DATASET_CAR_ROOT"
     _echo "Preparing test data via command: $SINGULARITY_CMD"
     $SINGULARITY_CMD
-    _echo "Awaiting prep completion."
+    _echo "Awaiting prep completion." && sleep 2
     PREP_STATUS="blank"
     MAX_SLEEP_SECS=120
     while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
@@ -142,6 +84,7 @@ function test_singularity_prep_multi_car() {
         PREP_STATUS="completed"
     done
     # TODO following variables to fix and handle multi-val.
+    sleep 1
     CAR_COUNT=`ls $DATASET_CAR_ROOT/*car | wc -l`
     ls $DATASET_CAR_ROOT/*car
     _echo "CAR_COUNT: $CAR_COUNT"
@@ -163,7 +106,7 @@ function test_singularity_prep() {
     SINGULARITY_CMD="singularity prep create --deal-size $TARGET_DEAL_SIZE $DATASET_NAME $DATASET_SOURCE_DIR $DATASET_CAR_ROOT"
     _echo "Preparing test data via command: $SINGULARITY_CMD"
     $SINGULARITY_CMD
-    _echo "Awaiting prep completion."
+    _echo "Awaiting prep completion..." && sleep 5
     PREP_STATUS="blank"
     MAX_SLEEP_SECS=120
     while [[ "$PREP_STATUS" != "completed" && $MAX_SLEEP_SECS -ge 0 ]]; do
@@ -206,17 +149,18 @@ function test_singularity_repl_multi_car() {
     CSV_DIR="$SINGULARITY_CSV_ROOT/$DATASET_NAME"
     REPL_CMD="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --max-deals 10 --verified false --price $PRICE --output-csv $CSV_DIR $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
     _echo "Executing replication command: $REPL_CMD"
-    $REPL_CMD # TODO investigate ERROR: data doesn't fit in a sector
+    $REPL_CMD
     sleep 1
     export REPL_ID=$(singularity repl list | grep $DATASET_ID | sed -n -r 's/^│[[:space:]]+[0-9]+[[:space:]]+│[[:space:]]*'\''([^'\'']*).*/\1/p')
     _echo "Singularity replication ID: $REPL_ID , for dataset ID: $DATASET_ID"
     REPL_STATUS_JSON=$(singularity repl status -v $REPL_ID)
     echo "export REPL_ID=$REPL_ID" >> $TEST_CONFIG_FILE
-    export DEAL_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dealCid')
-    echo "export DEAL_CID=$DEAL_CID" >> $TEST_CONFIG_FILE
-    export DATA_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dataCid')
-    echo "export DATA_CID=$DATA_CID" >> $TEST_CONFIG_FILE
-    _echo "REPL_ID=$REPL_ID ; DEAL_CID=$DEAL_CID ; DATA_CID=$DATA_CID"
+    _echo "REPL_STATUS_JSON: $REPL_STATUS_JSON"
+    #export DEAL_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dealCid') # multi-value
+    #echo "export DEAL_CID=$DEAL_CID" >> $TEST_CONFIG_FILE
+    #export DATA_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dataCid') # multi-value
+    #echo "export DATA_CID=$DATA_CID" >> $TEST_CONFIG_FILE
+    #_echo "REPL_ID=$REPL_ID ; DEAL_CID=$DEAL_CID ; DATA_CID=$DATA_CID"
     #export PIECE_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].pieceCid')
     # TODO: handle the case where 1 replication has many deals.
     #echo "export PIECE_CID=$PIECE_CID" >> $TEST_CONFIG_FILE
@@ -244,31 +188,94 @@ function test_singularity_repl() {
     export DATA_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].dataCid')
     export PIECE_CID=$(echo $REPL_STATUS_JSON | jq -r '.deals[].pieceCid')
     echo "export REPL_ID=$REPL_ID" >> $TEST_CONFIG_FILE
-    # TODO: handle the case where 1 replication has many deals.
+    # TODO: handle the case where 1 replication has many deals?
     echo "export DEAL_CID=$DEAL_CID" >> $TEST_CONFIG_FILE
     echo "export DATA_CID=$DATA_CID" >> $TEST_CONFIG_FILE
     echo "export PIECE_CID=$PIECE_CID" >> $TEST_CONFIG_FILE
 }
 
+function wait_seal_all_deals() {
+    _echo "waiting for deals to seal on miner."
+    _echo "to watch sealing live, you can run in another console: lotus-miner storage-deals list --watch"
+    MANIFEST_CSV_FILENAME=$(ls $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv | tail -1 )
+    {
+        read
+        while IFS=, read -r miner_id deal_cid filename data_cid piece_cid start_epoch full_url
+        do 
+            wait_seal_deal $deal_cid
+        done
+    } < $MANIFEST_CSV_FILENAME
+    _echo "all deals sealed."
+}
+
+function wait_seal_deal() {
+    DEAL_CID=$1
+    [[ -z "$DEAL_CID" ]] && { echo "DEAL_CID is required"; exit 1; }
+    DEAL_STATUS="invalid"
+    MAX_POLL_SECS=600
+    SLEEP_INTERVAL=10
+    _echo "Waiting for sealing of deal $DEAL_CID"
+    while [[ "$DEAL_STATUS" != "StorageDealActive" && $MAX_POLL_RETRY -ge 0 ]]; do
+        MAX_POLL_SECS=$(( $MAX_POLL_SECS - $SLEEP_INTERVAL ))
+        if [ $MAX_POLL_SECS -eq 0 ]; then _error "Timeout exceeded $MAX_POLL_SECS seconds waiting for prep deal status to go StorageDealActive."; fi
+        DEAL_STATUS=$( lotus-miner storage-deals list -v | grep $DEAL_CID | tr -s ' ' | cut -d ' ' -f7 )
+        _echo "deal:$DEAL_CID , status:$DEAL_STATUS"
+        if [ "$DEAL_STATUS" == "StorageDealActive" ]; then break; fi
+        sleep $SLEEP_INTERVAL
+    done
+}
+
+
+function wait_miner_receive_all_deals() {
+    _echo "waiting for miner to receive all deals."
+    MANIFEST_CSV_FILENAME=$(ls $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv | tail -1 )
+    {
+        read
+        while IFS=, read -r miner_id deal_cid filename data_cid piece_cid start_epoch full_url
+        do
+            wait_miner_receive_deal $deal_cid
+        done
+    } < $MANIFEST_CSV_FILENAME
+    _echo "all deals received."
+}
+
+function wait_miner_receive_deal() {
+    DEAL_CID=$1
+    [[ -z "$DEAL_CID" ]] && { echo "DEAL_CID is required"; exit 1; }
+    DEAL_STATUS="invalid"
+    MAX_POLL_SECS=600
+    SLEEP_INTERVAL=10
+    _echo "Waiting for miner to receive deal: $DEAL_CID"
+    while [[ "$DEAL_STATUS" != "StorageDealWaitingForData" && $MAX_POLL_RETRY -ge 0 ]]; do
+        MAX_POLL_SECS=$(( $MAX_POLL_SECS - $SLEEP_INTERVAL ))
+        if [ $MAX_POLL_SECS -eq 0 ]; then _error "Timeout exceeded $MAX_POLL_SECS seconds waiting for miner to receive deal: $DEAL_CID."; fi
+        DEAL_STATUS=$( lotus-miner storage-deals list -v | grep $DEAL_CID | tr -s ' ' | cut -d ' ' -f7 )
+        _echo "Deal:$DEAL_CID , status:$DEAL_STATUS"
+        if [[ "$DEAL_STATUS" == "StorageDealWaitingForData" || "$DEAL_STATUS" == "StorageDealActive" ]]; then break; fi
+        sleep $SLEEP_INTERVAL
+    done
+}
+
+function wait_singularity_manifest() {
+    echo "waiting for manifest csv file at: $SINGULARITY_CSV_ROOT/$DATASET_NAME"
+    MAX_POLL_SECS=600
+    CUR_SECS=0
+    SLEEP_INTERVAL=10
+    while [[ $CUR_SECS -le $MAX_POLL_SECS ]]; do
+        if ls $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv; then break; fi
+        sleep $SLEEP_INTERVAL
+        CUR_SECS=$((CUR_SECS+SLEEP_INTERVAL))
+    done
+}
+
+
 function test_miner_import_multi_car() {
     . $TEST_CONFIG_FILE
-    DATASET_CAR_ROOT="$DATA_CAR_ROOT/$DATASET_NAME"
-    CSV_DIR="$SINGULARITY_CSV_ROOT/$DATASET_NAME"
-    echo "looping thru deals in $CSV_DIR"
-    for CSV in $( ls $CSV_DIR/*.csv ); do
-        echo "looping thru $CSV"
-        while IFS="," read -r miner_id deal_cid filename data_cid piece_cid start_epoch full_url
-        do
-            echo "miner_id:$miner_id, deal_cid:$deal_cid filename:$filename data_cid:$data_cid piece_cid:$piece_cid start_epoch:$start_epoch full_url:$full_url"
-            FILENAME=`echo $full_url | sed 's|.*/\([^/]*\).*|\1|g'`
-            CAR_FILE=$DATASET_CAR_ROOT/$FILENAME
-            MINER_IMPORT_CMD="lotus-miner storage-deals import-data $deal_cid $CAR_FILE"
-            echo "Importing car into miner...executing: $MINER_IMPORT_CMD"
-            $MINER_IMPORT_CMD
-            _echo "CAR file imported: $CAR_FILE"
-        done < <(tail -1 $CSV)
-    done
-    _echo "CAR files imported. Need to await miner sealing..."
+    CSV_PATH=$(realpath $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv | head -1 ) # TODO handle >1 csv files?
+    CMD="./miner-import-car.sh $CSV_PATH /tmp/car/$DATASET_NAME"
+    _echo "[importing]: $CMD" 
+    $CMD
+    _echo "CAR files imported into miner."
 }
 
 function test_miner_import_car() {
@@ -282,7 +289,7 @@ function test_miner_import_car() {
     DEAL_STATUS="blank"
     MAX_POLL_SECS=600
     SLEEP_INTERVAL=10
-    _echo "Polling $MAX_POLL_SECS seconds, for deal status to go StorageDealActive..."
+    _echo "Waiting for deal status to go StorageDealActive..."
     while [[ "$DEAL_STATUS" != "StorageDealActive" && $MAX_POLL_RETRY -ge 0 ]]; do
         MAX_POLL_SECS=$(( $MAX_POLL_SECS - $SLEEP_INTERVAL ))
         if [ $MAX_POLL_SECS -eq 0 ]; then _error "Timeout exceeded $MAX_POLL_SECS seconds waiting for prep deal status to go StorageDealActive."; fi
@@ -299,18 +306,6 @@ function test_miner_import_car() {
     SINGULARITY_DEAL_STATUS_MD="singularity repl status -v $REPL_ID | jq  '.deals[] | ._id,.state,.errorMessage'"
     _echo "Querying singularity client deal status. Executing: $SINGULARITY_DEAL_STATUS_MD"
     $SINGULARITY_DEAL_STATUS_MD # somehow state remains in proposed... whats the refresh frequency of singularity ? retry later?
-}
-
-function test_miner_auto_import_script_DRAFT() {
-    MARKETS_API_INFO="SETME"
-    MINER_API_INFO="SETME"
-    # Which utility to use?: singularity-import
-    AUTO_IMPORT_SCRIPT="$HOME/singularity/scripts/auto-import.sh"
-    # Example: ./auto-import.sh <DATA_CAR_ROOT_path> <verified_client_address>
-    # auto-import.sh requires variables to be set.
-    # Tested this is working: lotus-miner storage-deals import-data <proposal CID> <file>
-    _echo "importing storage deals..."
-    $AUTO_IMPORT_SCRIPT $DATA_CAR_ROOT $CLIENT_WALLET_ADDRESS
 }
 
 function test_lotus_retrieve() {
@@ -372,7 +367,6 @@ function update_dns_txt_record_route53() {
 }
 
 function test_singularity_retrieve() {
-    setup_singularity_index
     #update_dns_txt_record_route53
     FILENAME="file-1" # Hardcoded
     RETRIEVE_FILE_PATH=$RETRIEVE_ROOT/$DATASET_NAME
@@ -419,25 +413,34 @@ function test_singularity() {
     test_miner_import_car
     sleep 1
     test_lotus_retrieve
+    setup_singularity_index
     test_singularity_retrieve
 
     _echo "test_singularity completed."
 }
 
-function mytest() {
-    . $TEST_CONFIG_FILE
-    generate_test_files 10 10 # generate_test_files 10 1024
-    test_singularity_prep #test_singularity_prep_multi_car
-    test_singularity_repl #test_singularity_repl_multi_car
-    sleep 10
+function dump_deal_info() {
     singularity repl list
     lotus client list-deals --show-failed -v
     lotus-miner storage-deals list -v
     lotus-miner sectors list
-    #_echo "sleeping, for miner to receive deal..." && sleep 60
-    #test_miner_import_multi_car
-    test_miner_import_car # error: cannot find deal ID.
-    #read -p 'Check that sealing has completed. Then type Enter to proceed to test_singularity_retrieve: ' promptvar
+}
+
+# nohup ./filecoin-tools-setup.sh mytest >> mytest.log.0 2>&1 &
+function mytest() {
+    . $TEST_CONFIG_FILE
+    generate_test_files 3 1024
+    # generate_test_files 10 1024 # FAILED. data doesn't fit in a sector, 2125 Bytes
+    # generate_test_files 10 1 # small 
+    test_singularity_prep_multi_car
+    test_singularity_repl_multi_car
+    _echo "sleeping a bit for miner to receive deals..." && sleep 31
+    wait_singularity_manifest
+    wait_miner_receive_all_deals
+    _echo "sleeping before importing cars..." && sleep 10 # TODO what is the wait condition?
+    test_miner_import_multi_car
+    wait_seal_all_deals
     sleep 1
+    setup_singularity_index
     test_singularity_retrieve
 }
