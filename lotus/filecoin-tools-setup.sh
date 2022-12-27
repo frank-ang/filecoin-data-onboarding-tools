@@ -258,7 +258,8 @@ function full_build_test() {
 }
 
 function run() {
-    full_build_test
+    # full_build_test
+    build
 }
 
 # Execute function from parameters
