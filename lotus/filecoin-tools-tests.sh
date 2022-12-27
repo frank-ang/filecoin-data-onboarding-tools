@@ -266,7 +266,7 @@ function update_dns_txt_record_route53() {
 
 function test_singularity_retrieve() {
     #update_dns_txt_record_route53
-    FILENAME="file-1" # Hardcoded
+    FILENAME="file-1" # Hardcoded for test
     RETRIEVE_FILE_PATH=$RETRIEVE_ROOT/$DATASET_NAME
     rm -rf $RETRIEVE_ROOT/$DATASET_NAME && mkdir -p $RETRIEVE_ROOT/$DATASET_NAME
     _exec "singularity-retrieve ls -v singularity:/$INDEX_ROOT_IPFS/"
