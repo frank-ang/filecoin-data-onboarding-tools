@@ -39,8 +39,6 @@ export MINERID="t01000"
 . $(dirname $(realpath $0))"/filecoin-tools-tests.sh" # import test functions.
 . $(dirname $(realpath $0))"/boost-setup.sh" # import boost functions.
 
-set -x
-
 function build_install_lotus() {
     _echo "Rebuilding from source..."
     stop_daemons
@@ -134,6 +132,7 @@ function _waitLotusStartup() {
 
 function stop_daemons() {
     _echo "Killing all daemons..."
+    killall boostd || true
     lotus-miner stop || true
     lotus daemon stop || true
     stop_singularity || true

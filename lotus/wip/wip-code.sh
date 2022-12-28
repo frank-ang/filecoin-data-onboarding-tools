@@ -90,7 +90,7 @@ function setup_boost_ui() {
     npm run build
     npm install -g serve
     nohup serve -s build >> /var/log/boost-ui.log 2>&1 &
-    # Browser Access: http://localhost:8080 , via SSH tunnel ssh -L 8080:localhost:8080 myserver
+    # Browser Access: http://localhost:8080 , via SSH tunnel: ssh -L 8080:localhost:8080 user@remote-host
     # API Access: requires BOOST_API_INFO environment variable
     # Demonstration of API Access
     sleep 2
