@@ -13,27 +13,6 @@ TARGET_DEAL_SIZE="2KiB" # devnet. For prod use: "32GiB"
 GEN_TEST_DATA_SCRIPT=$(dirname $(realpath $0))"/gen-test-data.sh"
 MINER_IMPORT_SCRIPT=$(dirname $(realpath $0))"/miner-import-car.sh"
 
-# Retries a command on failure. Increasing backoff interval.
-# $1 - the max number of attempts
-# $2... - the command to run
-# example:
-#   retry 5 ls -ltr foo
-function retry() {
-    local -r -i max_attempts="$1"; shift
-    local -r cmd="$@"
-    local -i attempt_num=1
-    until $cmd
-    do
-        if (( attempt_num == max_attempts ))
-        then
-            _error "exceeded $attempt_num retries executing: $cmd"
-        else
-            echo "Attempt $attempt_num failed. Trying again in $attempt_num seconds..."
-            sleep $(( attempt_num++ ))
-        fi
-    done
-}
-
 
 # Creates test data files with pattern: $DATA_SOURCE_ROOT/$DATASET_NAME/file-$FILE_COUNT
 # generates and sets a random DATASET_NAME

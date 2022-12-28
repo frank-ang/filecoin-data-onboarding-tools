@@ -9,6 +9,7 @@
 # https://lotus.filecoin.io/lotus/install/linux/#building-from-source
 
 set -e
+
 export LOTUS_PATH=$HOME/.lotus # $HOME/.lotusDevnetTest/
 export LOTUS_MINER_PATH=$HOME/.lotusminer # $HOME/.lotusminerDevnetTest/
 export LOTUS_SKIP_GENESIS_CHECK=_yes_
@@ -36,29 +37,35 @@ export MINERID="t01000"
 
 . $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
 . $(dirname $(realpath $0))"/filecoin-tools-tests.sh" # import test functions.
+. $(dirname $(realpath $0))"/boost-setup.sh" # import boost functions.
 
-function build_lotus() {
+set -x
+
+function build_install_lotus() {
     _echo "Rebuilding from source..."
     stop_daemons
-    _echo "## Installing prereqs..."
+    _echo "Installing prereqs..."
     apt install -y mesa-opencl-icd ocl-icd-opencl-dev gcc git bzr jq pkg-config curl clang build-essential hwloc libhwloc-dev wget && sudo apt upgrade -y
     curl https://sh.rustup.rs -sSf > RUSTUP.sh
     sh RUSTUP.sh -y
     rm RUSTUP.sh
     wget -c https://go.dev/dl/go1.18.4.linux-amd64.tar.gz -O - | tar -xz -C /usr/local
     echo "export PATH=$PATH:/usr/local/go/bin" >> ~/.bashrc && source ~/.bashrc
-    _echo "## Building lotus..."
+    _echo "Building lotus..."
     cd $HOME
     rm -rf $LOTUS_PATH
     rm -rf $LOTUS_SOURCE
     git clone https://github.com/filecoin-project/lotus.git
     cd lotus/
-    git checkout releases
+    # git checkout releases
+    git fetch --all
+    git checkout tags/v1.18.0 # boost requirement.
     make clean
     time make 2k
-    _echo "## Installing lotus..."
+    _echo "Installing lotus..."
     make install
-    _echo "## Lotus installed complete. Lotus version: "`lotus --version`
+    install -C ./lotus-seed /usr/local/bin/lotus-seed
+    _echo "Lotus installed complete. Lotus version: "`lotus --version`
 }
 
 function init_daemons() {
@@ -75,7 +82,7 @@ function init_daemons() {
     time ./lotus-seed genesis new localnet.json
     _echo "Create a default address and give it some funds..."
     time ./lotus-seed genesis add-miner localnet.json ~/.genesis-sectors/pre-seal-t01000.json
-    _echo "Starting first node..."
+    _echo "Starting lotus daemon, first time..."
     nohup ./lotus daemon --lotus-make-genesis=devgen.car --genesis-template=localnet.json --bootstrap=false >> /var/log/lotus-daemon.log 2>&1 &
     _echo "Awaiting daemon startup... could take awhile...."
     time _waitLotusStartup "1800s"
@@ -186,6 +193,7 @@ function init_singularity() {
 
 function setup_ipfs() {
     _echo "setting up IPFS..."
+    cd /tmp
     wget https://dist.ipfs.tech/kubo/v0.17.0/kubo_v0.17.0_linux-amd64.tar.gz
     tar -xvzf kubo_v0.17.0_linux-amd64.tar.gz
     cd kubo
@@ -234,7 +242,7 @@ function setup_wallets() {
     _echo "client lotus wallet address: $CLIENT_WALLET_ADDRESS, balance: $CLIENT_WALLET_BALANCE"
 }
 
-function build {
+function build_config_all {
     setup_ipfs
     start_ipfs
 
@@ -242,7 +250,7 @@ function build {
     init_singularity
     start_singularity
 
-    build_lotus
+    build_install_lotus
     init_daemons && sleep 10
 
     stop_daemons && sleep 2
@@ -253,13 +261,13 @@ function build {
 }
 
 function full_build_test() {
-    build
+    build_config_all
     test_singularity
 }
 
 function run() {
+    build_install_lotus
     # full_build_test
-    build
 }
 
 # Execute function from parameters
