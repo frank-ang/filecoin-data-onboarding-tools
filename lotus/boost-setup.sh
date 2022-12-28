@@ -1,6 +1,6 @@
 #!/bin/bash
 
-. $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
+. $(dirname $(realpath $0))"/filecoin-tools-common.sh"
 BOOST_ENV_FILE=$(dirname $(realpath $0))"/boost.env"
 ulimit -n 1048576
 PROJECT_HOME=$HOME
@@ -116,10 +116,8 @@ function init_boost_repo() {
 }
 
 function setup_web_ui() {
-    cd $HOME/boost
-    # make react # TODO curl returns 404 not found
-    npm install --legacy-peer-deps
-    npm run build
+    cd $HOME/boost/
+    make react
 }
 
 function setup_maddr() {
@@ -153,7 +151,6 @@ function setup_maddr() {
 
 function start_boostd() {
     echo Starting boost in dev mode...
-    # exec boostd -vv run
     nohup boostd -vv run >> $HOME/boost/boostd.log 2>&1 &
 }
 
@@ -175,6 +172,7 @@ function do_boost_client() {
 function rebuild_boost_devnet() {
     set -x
     clone_boost_repo
+    setup_web_ui
     build_boost_devnet
     start_boost_devnet
     wait_boost_miner_up
@@ -182,7 +180,6 @@ function rebuild_boost_devnet() {
     create_boost_wallets
     add_funds_boost_wallets
     init_boost_repo
-    setup_web_ui # TODO 404
     setup_maddr
     start_boostd
     set +x
@@ -191,10 +188,10 @@ function rebuild_boost_devnet() {
 
 function verify_boost_install() {
     curl -s -X POST -H "Content-Type: application/json" -d '{"query":"query {epoch { Epoch }}"}' http://localhost:8080/graphql/query
-    curl http://localhost:8080 # 404 page not found?
+    echo
+    curl http://localhost:8080
     # Tunnel: ssh -L 8080:localhost:8080 ubuntu@myserver
-    # open web ui localhost:8080
-    # Problem with boost UI: 404 not found
+    # open browser to localhost:8080
 }
 
 function setup_boost_devnet() {
