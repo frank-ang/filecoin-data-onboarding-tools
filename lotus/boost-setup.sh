@@ -169,7 +169,7 @@ function do_boost_client() {
 }
 
 
-function build_boost_devnet() {
+function build_configure_boost_devnet() {
     #set -x
     clone_boost_repo
     setup_web_ui
@@ -196,6 +196,6 @@ function verify_boost_install() {
 
 function setup_boost_devnet() {
     build_lotus_devnet_for_boost
-    build_boost_devnet
+    build_configure_boost_devnet
     verify_boost_install
 }
