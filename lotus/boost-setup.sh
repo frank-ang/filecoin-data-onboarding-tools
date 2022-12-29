@@ -6,7 +6,7 @@ ulimit -n 1048576
 PROJECT_HOME=$HOME
 BOOST_PATH=$HOME/.boost
 
-function build_lotus_devnet() {
+function build_lotus_devnet_for_boost() {
     stop_daemons
     _echo "Rebuilding from source..."
     stop_daemons
@@ -169,8 +169,8 @@ function do_boost_client() {
 }
 
 
-function rebuild_boost_devnet() {
-    set -x
+function build_boost_devnet() {
+    #set -x
     clone_boost_repo
     setup_web_ui
     build_boost_devnet
@@ -182,7 +182,7 @@ function rebuild_boost_devnet() {
     init_boost_repo
     setup_maddr
     start_boostd
-    set +x
+    #set +x
     retry 20 verify_boost_install
 }
 
@@ -195,7 +195,7 @@ function verify_boost_install() {
 }
 
 function setup_boost_devnet() {
-    build_lotus_devnet # comment out to skip rebuild lotus
-    rebuild_boost_devnet
+    build_lotus_devnet_for_boost
+    build_boost_devnet
     verify_boost_install
 }

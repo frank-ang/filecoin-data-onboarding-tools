@@ -313,7 +313,7 @@ function test_singularity() {
 }
 
 
-function exercise_api() {
+function exercise_singularity_api_wip() {
     . $TEST_CONFIG_FILE
     set -x
     curl http://localhost:7001/preparations | jq

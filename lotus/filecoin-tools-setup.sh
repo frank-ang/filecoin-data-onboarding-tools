@@ -264,11 +264,18 @@ function full_build_test() {
     test_singularity
 }
 
+function full_build_test_boost() {
+    setup_ipfs
+    start_ipfs
+    install_singularity
+    init_singularity
+    start_singularity
+    setup_boost_devnet
+}
+
 function run() {
-    build_install_lotus
+    full_build_test_boost
     # full_build_test
 }
 
-# Execute function from parameters
-# cd $HOME
-$@
+$@ # Execute function with parameters
