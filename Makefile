@@ -58,16 +58,15 @@ deploy_script:
 #	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/miner-import-car.sh /root/filecoin-data-onboarding-tools/lotus/"
 
 
-connect_boost:
+connect_boost: start_tunnel
 	@echo "Connecting to Boost UX: ${AWS_APPLIANCE_IP}:8080"
 	@echo starting local MacOS SSH tunnel...
 	ssh -L 8080:localhost:8080 ubuntu@${AWS_APPLIANCE_IP} &
 	open -n -a "Google Chrome" --args '--new-window' "http://localhost:8080"
 
-# TODO: investigate UX error: Error: Unexpected token '<', "<!doctype "... is not valid JSON
-# ssh -L 3000:localhost:3000 ubuntu@${AWS_APPLIANCE_IP}
-# ssh ubuntu@${AWS_APPLIANCE_IP} -L 3001:${AWS_APPLIANCE_IP}:3000 -fN
-
-tunnel_to_appliance:
+start_tunnel:
 	@echo "Starting local TCP tunnel to: ${AWS_APPLIANCE_IP}"
-	ssh -L 8080:127.0.0.1:8080 ubuntu@${AWS_APPLIANCE_IP} &
+	ssh -M -S ~/boost-tunnel-socket.tmp -o "ExitOnForwardFailure yes" -o "StrictHostKeyChecking no" -fN -L 8080:localhost:8080 ubuntu@${AWS_APPLIANCE_IP}
+
+stop_tunnel:
+	ssh -S ~/boost-tunnel-socket.tmp ${AWS_APPLIANCE_IP} -O exit

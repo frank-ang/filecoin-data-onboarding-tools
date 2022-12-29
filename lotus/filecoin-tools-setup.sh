@@ -278,4 +278,4 @@ function run() {
     # full_build_test
 }
 
-$@ # Execute function with parameters
+time $@ # Execute function with parameters

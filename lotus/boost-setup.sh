@@ -89,13 +89,14 @@ function create_boost_wallets() {
 }
 
 function add_funds_boost_wallets() {
-    lotus send --from $DEFAULT_WALLET $COLLAT_WALLET 10
-    lotus send --from $DEFAULT_WALLET $PUBMSG_WALLET 10
-    lotus send --from $DEFAULT_WALLET $CLIENT_WALLET 10
+    _echo "adding funds to boost wallets.."
+    lotus send --from $DEFAULT_WALLET $COLLAT_WALLET 100
+    lotus send --from $DEFAULT_WALLET $PUBMSG_WALLET 100
+    lotus send --from $DEFAULT_WALLET $CLIENT_WALLET 100
     sleep 20 # some time for wallet funds to appear on chain.
     retry 10 lotus-miner actor control set --really-do-it $PUBMSG_WALLET
-    retry 5 lotus wallet market add --from $DEFAULT_WALLET --address $CLIENT_WALLET 5
-    retry 5 lotus wallet market add --address $COLLAT_WALLET 5
+    retry 5 lotus wallet market add --from $DEFAULT_WALLET --address $CLIENT_WALLET 10
+    retry 5 lotus wallet market add --address $COLLAT_WALLET 10
     lotus wallet list
     until lotus-miner actor control set --really-do-it ${PUBMSG_WALLET}; do echo Waiting for storage miner API ready ...; sleep 1; done
 }
@@ -154,37 +155,31 @@ function start_boostd() {
 function test_boost_deal() {
     cd $HOME/boost
     [[ -z "$FULLNODE_API_INFO" ]] && { _error "FULLNODE_API_INFO is required"; }
-    boost -vv init
     export BOOST_INIT_CLIENT_WALLET=`boost wallet default`
     _echo "boost client wallet: $BOOST_INIT_CLIENT_WALLET"
     echo "export BOOST_INIT_CLIENT_WALLET=$BOOST_INIT_CLIENT_WALLET" >> $BOOST_ENV_FILE
     _echo "funding client wallet: $BOOST_INIT_CLIENT_WALLET"
-    #lotus send --from $DEFAULT_WALLET $BOOST_INIT_CLIENT_WALLET 100 && sleep 30
-    boostx market-add 11
-    sleep 30
+    lotus send --from $DEFAULT_WALLET $BOOST_INIT_CLIENT_WALLET 100 && sleep 30
+    boostx market-add -y 100 && sleep 30
     SOURCE_PATH=$HOME/lotus/README.md
-    CAR_PATH=/var/www/html/my-data.car # nginx path
+    CAR_PATH=/var/www/html/my-data.car # nginx path, hardcoded.
     PAYLOAD_CID=$(boostx generate-car $SOURCE_PATH $CAR_PATH | sed -nr 's/^Payload CID:[[:space:]]+([[:alnum:]]+)$/\1/p')
     if [ ${#PAYLOAD_CID} -lt 62 ]; then _error "Invalid Payload CID:$PAYLOAD_CID , length: ${#PAYLOAD_CID}"; fi
     CAR_HTTP_URL="https://localhost/my-data.car"
-    COMMP_CID=`boostx commp /app/public/sample.car 2> /dev/null | grep CID | cut -d: -f2 | xargs`
-    PIECE=`boostx commp /app/public/sample.car 2> /dev/null | grep Piece | cut -d: -f2 | xargs`
-    CAR=`boostx commp /app/public/sample.car 2> /dev/null | grep Car | cut -d: -f2 | xargs`
-    STORAGE_PRICE=20000000000
-    BOOST_DEAL_CMD=boost -vv deal --verified=false \
-                --provider=$MINERID \
-                --http-url=$CAR_HTTP_URL \
-                --commp=$COMMP_CID \
-                --car-size=$CAR_SIZE \
-                --piece-size=$PIECE_SIZE \
-                --payload-cid=$PAYLOAD_CID \
-                --storage-price $STORAGE_PRICE
+    COMMP_CID=`boostx commp $CAR_PATH 2> /dev/null | grep CID | cut -d: -f2 | xargs`
+    PIECE_SIZE=`boostx commp $CAR_PATH 2> /dev/null | grep Piece | cut -d: -f2 | xargs`
+    CAR_SIZE=`boostx commp $CAR_PATH 2> /dev/null | grep Car | cut -d: -f2 | xargs`
+    STORAGE_PRICE=20000000000 # hardcoded, todo dynamic calc.
+    [[ -z "$COMMP_CID" ]] && { _error "COMMP_CID is required"; }
+    [[ -z "$CAR_SIZE" ]] && { _error "FULLNODE_API_INFO is required"; }
+
+    BOOST_DEAL_CMD="boost -vv deal --verified=false --provider=$MINERID \
+        --http-url=$CAR_HTTP_URL --commp=$COMMP_CID --car-size=$CAR_SIZE \
+        --piece-size=$PIECE_SIZE --payload-cid=$PAYLOAD_CID --storage-price $STORAGE_PRICE"
     _echo "Executing boost deal: $BOOST_DEAL_CMD"
 }
 
-
 function build_configure_boost_devnet() {
-    #set -x
     clone_boost_repo
     setup_web_ui
     build_boost_devnet
@@ -196,16 +191,14 @@ function build_configure_boost_devnet() {
     init_boost_repo
     setup_maddr
     start_boostd
-    #set +x
     retry 20 verify_boost_install
+    test_boost_deal
 }
 
 function verify_boost_install() {
     curl -s -X POST -H "Content-Type: application/json" -d '{"query":"query {epoch { Epoch }}"}' http://localhost:8080/graphql/query
     echo
     curl http://localhost:8080
-    # Tunnel: ssh -L 8080:localhost:8080 ubuntu@myserver
-    # open browser to localhost:8080
 }
 
 function setup_boost_devnet() {
