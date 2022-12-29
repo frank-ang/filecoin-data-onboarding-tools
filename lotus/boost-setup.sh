@@ -108,11 +108,8 @@ function init_boost_repo() {
     --wallet-publish-storage-deals=$PUBMSG_WALLET \
     --wallet-deal-collateral=$COLLAT_WALLET \
     --max-staging-deals-bytes=2000000000
-
     _echo "Setting port in boost config..."
 	sed -i 's|ip4/0.0.0.0/tcp/0|ip4/0.0.0.0/tcp/50000|g' $HOME/.boost/config.toml
-    #[Libp2p]
-    #  ListenAddresses = ["/ip4/0.0.0.0/tcp/50000", "/ip6/::/tcp/0"]
 }
 
 function setup_web_ui() {
@@ -154,7 +151,7 @@ function start_boostd() {
     nohup boostd -vv run >> $HOME/boost/boostd.log 2>&1 &
 }
 
-function do_boost_client() {
+function test_boost_deal() {
     cd $HOME/boost
     [[ -z "$FULLNODE_API_INFO" ]] && { _error "FULLNODE_API_INFO is required"; }
     boost -vv init
@@ -165,7 +162,24 @@ function do_boost_client() {
     #lotus send --from $DEFAULT_WALLET $BOOST_INIT_CLIENT_WALLET 100 && sleep 30
     boostx market-add 11
     sleep 30
-    boostx generate-car ./README.md ./my-data.car
+    SOURCE_PATH=$HOME/lotus/README.md
+    CAR_PATH=/var/www/html/my-data.car # nginx path
+    PAYLOAD_CID=$(boostx generate-car $SOURCE_PATH $CAR_PATH | sed -nr 's/^Payload CID:[[:space:]]+([[:alnum:]]+)$/\1/p')
+    if [ ${#PAYLOAD_CID} -lt 62 ]; then _error "Invalid Payload CID:$PAYLOAD_CID , length: ${#PAYLOAD_CID}"; fi
+    CAR_HTTP_URL="https://localhost/my-data.car"
+    COMMP_CID=`boostx commp /app/public/sample.car 2> /dev/null | grep CID | cut -d: -f2 | xargs`
+    PIECE=`boostx commp /app/public/sample.car 2> /dev/null | grep Piece | cut -d: -f2 | xargs`
+    CAR=`boostx commp /app/public/sample.car 2> /dev/null | grep Car | cut -d: -f2 | xargs`
+    STORAGE_PRICE=20000000000
+    BOOST_DEAL_CMD=boost -vv deal --verified=false \
+                --provider=$MINERID \
+                --http-url=$CAR_HTTP_URL \
+                --commp=$COMMP_CID \
+                --car-size=$CAR_SIZE \
+                --piece-size=$PIECE_SIZE \
+                --payload-cid=$PAYLOAD_CID \
+                --storage-price $STORAGE_PRICE
+    _echo "Executing boost deal: $BOOST_DEAL_CMD"
 }
 
 

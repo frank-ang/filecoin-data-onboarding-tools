@@ -59,12 +59,15 @@ deploy_script:
 
 
 connect_boost:
-	@echo "Connecting to boost browser UI at: ${AWS_APPLIANCE_IP}:3000"
-	open -n -a "Google Chrome" --args '--new-window' "http://${AWS_APPLIANCE_IP}:3000"
+	@echo "Connecting to Boost UX: ${AWS_APPLIANCE_IP}:8080"
+	@echo starting local MacOS SSH tunnel...
+	ssh -L 8080:localhost:8080 ubuntu@${AWS_APPLIANCE_IP} &
+	open -n -a "Google Chrome" --args '--new-window' "http://localhost:8080"
+
 # TODO: investigate UX error: Error: Unexpected token '<', "<!doctype "... is not valid JSON
 # ssh -L 3000:localhost:3000 ubuntu@${AWS_APPLIANCE_IP}
 # ssh ubuntu@${AWS_APPLIANCE_IP} -L 3001:${AWS_APPLIANCE_IP}:3000 -fN
 
 tunnel_to_appliance:
 	@echo "Starting local TCP tunnel to: ${AWS_APPLIANCE_IP}"
-	ssh -L 8080:127.0.0.1:8080 ubuntu@${AWS_APPLIANCE_IP}
+	ssh -L 8080:127.0.0.1:8080 ubuntu@${AWS_APPLIANCE_IP} &
