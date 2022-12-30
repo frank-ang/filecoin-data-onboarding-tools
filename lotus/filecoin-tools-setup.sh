@@ -61,7 +61,7 @@ function build_install_lotus() {
     make clean
     time make 2k
     _echo "Installing lotus..."
-    make install
+    sudo make install
     install -C ./lotus-seed /usr/local/bin/lotus-seed
     _echo "Lotus installed complete. Lotus version: "`lotus --version`
 }
@@ -137,6 +137,9 @@ function stop_daemons() {
     lotus daemon stop || true
     stop_singularity || true
     stop_ipfs || true
+    killall devnet  || true
+    killall lotus-miner || true
+    killall lotus || true
 }
 
 function start_singularity() {
@@ -259,7 +262,7 @@ function build_config_all {
     setup_wallets && sleep 5
 }
 
-function full_build_test() {
+function full_build_test_legacy() {
     build_config_all
     test_singularity
 }
@@ -275,7 +278,7 @@ function full_build_test_boost() {
 
 function run() {
     full_build_test_boost
-    # full_build_test
+    # full_build_test_legacy
 }
 
 time $@ # Execute function with parameters

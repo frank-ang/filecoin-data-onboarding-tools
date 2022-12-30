@@ -7,7 +7,7 @@ PROJECT_HOME=$HOME
 BOOST_PATH=$HOME/.boost
 
 function build_lotus_devnet_for_boost() {
-    _echo "Rebuilding from source..."
+    _echo "Rebuilding lotus devnet for boost..."
     stop_daemons
     rm -rf ~/.lotusmarkets ~/.lotus ~/.lotusminer ~/.genesis_sectors ~/.genesis-sectors
     _echo "Installing prereqs..."
@@ -29,7 +29,8 @@ function build_lotus_devnet_for_boost() {
     make install
     sudo install -C ./lotus-seed /usr/local/bin/lotus-seed
     sleep 1
-    _echo "Lotus installed complete. Lotus version: "`lotus --version`
+    _echo "Lotus installed complete. Lotus version: "
+    lotus --version
 }
 
 function clone_boost_repo() {
@@ -43,10 +44,12 @@ function clone_boost_repo() {
 
 function build_boost_devnet() {
     rm -f $BOOST_ENV_FILE
+    rm -rf $BOOST_PATH
     cd $PROJECT_HOME/boost/
     make react
     make debug
     sudo make install
+    boost --version
 }
 
 function start_boost_devnet() {
@@ -61,7 +64,7 @@ function wait_boost_miner_up() {
     unset MINER_API_INFO
     unset FULLNODE_API_INFO
     lotus-miner wait-api --timeout 1200s
-    retry 10 lotus-miner auth api-info --perm=admin
+    retry 20 lotus-miner auth api-info --perm=admin
 }
 
 function get_miner_auth_tokens() {
@@ -142,13 +145,14 @@ function setup_maddr() {
         echo "Trying to stop boost..."
         kill -15 $BOOST_PID || kill -9 $BOOST_PID
         rm -f $BOOST_PATH/boostd.log
-        echo "Boostd is now configured"
+        echo "Boostd is now configured!"
     fi
 }
 
 function start_boostd() {
     echo "Starting boost in dev mode..."
     nohup boostd -vv run >> $HOME/boost/boostd.log 2>&1 &
+    retry 10 verify_boost_install
 }
 
 function fund_wallets() {
@@ -159,8 +163,12 @@ function fund_wallets() {
     echo "export BOOST_INIT_CLIENT_WALLET=$BOOST_INIT_CLIENT_WALLET" >> $BOOST_ENV_FILE
     _echo "funding boost client wallet: $BOOST_INIT_CLIENT_WALLET"
     lotus send --from $LOTUS_WALLET $BOOST_INIT_CLIENT_WALLET 21000000 && sleep 30
-    boostx market-add -y 88888 && sleep 30
-    _echo "after funding, lotus wallet list: "`lotus wallet list`
+    retry 60 boostx market-add -y 8088
+    sleep 30
+    _echo "after funding, lotus wallet list: "
+    lotus wallet list
+    _echo "after funding, lotus wallet default: "
+    lotus wallet default
 }
 
 function test_boost_deal() {
@@ -175,7 +183,7 @@ function test_boost_deal() {
     COMMP_CID=`boostx commp $CAR_PATH 2> /dev/null | grep CID | cut -d: -f2 | xargs`
     PIECE_SIZE=`boostx commp $CAR_PATH 2> /dev/null | grep Piece | cut -d: -f2 | xargs`
     CAR_SIZE=`boostx commp $CAR_PATH 2> /dev/null | grep Car | cut -d: -f2 | xargs`
-    STORAGE_PRICE=20000000000 # hardcoded, todo dynamic calc.
+    STORAGE_PRICE=20000000000 # hardcoded, TODO set miner ask and calculate this dynamically?
     [[ -z "$COMMP_CID" ]] && { _error "COMMP_CID is required"; }
     [[ -z "$CAR_SIZE" ]] && { _error "FULLNODE_API_INFO is required"; }
 
@@ -202,13 +210,14 @@ function build_configure_boost_devnet() { # runtime duration: 5m1s
 function verify_boost_install() {
     curl -s -X POST -H "Content-Type: application/json" -d '{"query":"query {epoch { Epoch }}"}' http://localhost:8080/graphql/query
     echo
-    curl http://localhost:8080 | grep boost
+    curl http://localhost:8080 | grep "Boost"
 }
 
-function setup_boost_devnet() { # runtime duration: 
+function setup_boost_devnet() { # runtime duration approx: 8m39s
     build_lotus_devnet_for_boost
     build_configure_boost_devnet
-    retry 20 verify_boost_install
+    retry 40 verify_boost_install
+    boost init
     fund_wallets
     test_boost_deal
 }
