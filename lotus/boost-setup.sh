@@ -179,7 +179,7 @@ function test_boost_deal() {
     CAR_PATH=/var/www/html/my-data.car # nginx path, hardcoded.
     PAYLOAD_CID=$(boostx generate-car $SOURCE_PATH $CAR_PATH | sed -nr 's/^Payload CID:[[:space:]]+([[:alnum:]]+)$/\1/p')
     if [ ${#PAYLOAD_CID} -lt 62 ]; then _error "Invalid Payload CID:$PAYLOAD_CID , length: ${#PAYLOAD_CID}"; fi
-    CAR_HTTP_URL="https://localhost/my-data.car"
+    CAR_HTTP_URL="http://localhost/my-data.car"
     COMMP_CID=`boostx commp $CAR_PATH 2> /dev/null | grep CID | cut -d: -f2 | xargs`
     PIECE_SIZE=`boostx commp $CAR_PATH 2> /dev/null | grep Piece | cut -d: -f2 | xargs`
     CAR_SIZE=`boostx commp $CAR_PATH 2> /dev/null | grep Car | cut -d: -f2 | xargs`
