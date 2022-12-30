@@ -192,7 +192,7 @@ function test_boost_deal() {
         --piece-size=$PIECE_SIZE --payload-cid=$PAYLOAD_CID --storage-price $STORAGE_PRICE"
     _echo "Executing boost deal: $BOOST_DEAL_CMD"
     $BOOST_DEAL_CMD
-    sleep 5
+    sleep 30
     _echo "publishing deal now..."
     curl -X POST -H "Content-Type: application/json" -d '{"query":"mutation { dealPublishNow }"}' http://localhost:8080/graphql/query | jq
     # now deal stuck in Status	"Sealer: WaitDeals",
@@ -203,30 +203,51 @@ function test_boost_deal() {
     #    lotus-miner sectors seal [command options] <sectorNum>
     # lets try option 2 manually first. Use the default devnet miner settings.
     # ...
-    # babysit_deal_sealing
+    babysit_deal_sealing
 }
 
 function babysit_deal_sealing() {
-    # force it thru with cli...
-    ./lotus-miner sectors list
+    # push the sector thru sealing.
+    lotus-miner sectors list
+    SECTOR_ID="INVALID"
+    NUM_REGEX='^[0-9]+$'
+    TIMEOUT=60
+    SLEEP_INTERVAL_SECS=5
+    if ! [[ "$SECTOR_ID" =~ $NUM_REGEX ]] && [ "$TIMEOUT" -ge 0 ]; then
+        SECTOR_ID=$(lotus-miner sectors list | grep WaitDeals | tail -1 | awk '{print $1}' )
+        _echo "SECTOR_ID: $SECTOR_ID , TIMEOUT: $TIMEOUT"
+        TIMEOUT=$(( TIMEOUT - $SLEEP_INTERVAL_SECS))
+        [ "$TIMEOUT" -lt 0 ] && _error "Timed out waiting for a sector with state: WaitDeals"
+        sleep $SLEEP_INTERVAL_SECS
+    fi
+    _echo "Sector ID in WaitDeals state: $SECTOR_ID"
+
     # sector stuck in "WaitDeals", lets force it to seal:
-    ./lotus-miner sectors seal 2
+    [[ -z "$SECTOR_ID" ]] && { _error "SECTOR_ID is required"; }
+    lotus-miner sectors seal $SECTOR_ID
+    watch_sector_sealing $SECTOR_ID
+}
 
-    # now sector is in "SubmitPreCommitBatch"
-    #  list sectors waiting in precommit batch queue
-    ./lotus-miner sectors batching precommit
-    #  send a batch now
-    ./lotus-miner sectors batching precommit --publish-now
-
-    # now sector is in "SubmitCommitAggregate"
-    ./lotus-miner sectors batching commit
-    ./lotus-miner sectors batching commit --publish-now
-
-    ./lotus-miner sectors list
+function watch_sector_sealing() {
+    SECTOR_ID="$1"
+    [[ -z "$SECTOR_ID" ]] && { _error "SECTOR_ID is required"; }
+    _echo "watching sealing for sector: $SECTOR_ID"
+    STATUS=""
+    TIMEOUT=600
+    SLEEP_INTERVAL_SECS=5
+    until [[ "$STATUS" == "Proving" ]] || [ "$TIMEOUT" -lt 0 ]; do 
+        STATUS=$( lotus-miner sectors status "$SECTOR_ID" | grep Status | awk '{print $2}' )
+        _echo "Sector:$SECTOR_ID status:$STATUS"
+        TIMEOUT=$(( TIMEOUT - $SLEEP_INTERVAL_SECS))
+        [ "$TIMEOUT" -lt 0 ] && _error "Timed out waiting for sector:$SECTOR_ID to go Proving state"
+        sleep $SLEEP_INTERVAL_SECS
+    done
+    lotus-miner sectors list
     # Sector status should move to PrecommitWait -> WaitSeed, CommitWait, Proving -> FinalizeSector
+}
 
-    ./lotus client list-deals
-    # Deal is StorageDealActive.
+function test_boost_retrieval() {
+    _echo "TODO test_boost_retrieval..."
 }
 
 ######## main sequence #######
