@@ -20,6 +20,10 @@ There is a CloudFormation template that deploys an Ubuntu instance running the f
 
 Rapidly spin up the stack on an Ubuntu AWS EC2 instance, CloudFormation template provided. Setup scripts are portable to similar Ubuntu environments.
 
+## Prerequisites:
+
+Local Workstation (tested on MacOS) with bash, make, jq, etc.
+Ubuntu Linux instance (tested on AWS EC2 r5.2xlarge)
 
 
 ## Running
@@ -80,13 +84,13 @@ make delete_appliance
 
 ### Legacy markets test.
 
-* Full rebuild and test.
+Full rebuild and legacy markets test.
 ```bash
 cd $HOME/filecoin-data-onboarding-tools/lotus
 nohup ./filecoin-tools-setup.sh full_build_test_legacy >> /var/log/filecoin-tools-setup.log 2>&1 &
 ```
 
-* re-run tests only.
+Re-run tests only.
 ```bash
 cd $HOME/filecoin-data-onboarding-tools/lotus
 nohup ./filecoin-tools-setup.sh test_singularity >> test_singularity.log 2>&1 &
@@ -95,14 +99,24 @@ nohup ./filecoin-tools-setup.sh test_singularity >> test_singularity.log 2>&1 &
 
 ### Boost markets test.
 
-* Full rebuild and test.
+Full rebuild and boost markets test.
 ```bash
 cd ./lotus
 nohup ./filecoin-tools-setup.sh full_build_test_boost >> /var/log/filecoin-tools-setup-boost.log 2>&1 &
 ```
 
-* re-run tests only.
+For MacOS, to connect to remote Boost UX, open your local workstation shell terminal, and:
 ```
-WIP.
+make connect_boost
 ```
+This starts an SSH tunnel in the background, and opens Chrome to the URL (http://localhost:8080)[http://localhost:8080]. The Boost admin page should load.
+
+For other platforms:
+```
+make start_tunnel
+# access http://localhost:8080 , when completed, 
+make stop_tunnel
+```
+
+
 

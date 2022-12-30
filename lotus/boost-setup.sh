@@ -205,6 +205,7 @@ function build_configure_boost_devnet() { # runtime duration: 5m1s
     init_boost_repo
     setup_maddr
     start_boostd
+    retry 40 verify_boost_install
 }
 
 function verify_boost_install() {
@@ -213,11 +214,11 @@ function verify_boost_install() {
     curl http://localhost:8080 | grep "Boost"
 }
 
-function setup_boost_devnet() { # runtime duration approx: 8m39s
+function setup_boost_devnet() {
     build_lotus_devnet_for_boost
     build_configure_boost_devnet
-    retry 40 verify_boost_install
-    boost init
+    boost init # client
     fund_wallets
-    test_boost_deal
+    test_boost_deal # runtime duration approx: 8m39s (2022-12-30)
+    # TODO verify deal
 }
