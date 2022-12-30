@@ -192,7 +192,44 @@ function test_boost_deal() {
         --piece-size=$PIECE_SIZE --payload-cid=$PAYLOAD_CID --storage-price $STORAGE_PRICE"
     _echo "Executing boost deal: $BOOST_DEAL_CMD"
     $BOOST_DEAL_CMD
+    sleep 5
+    _echo "publishing deal now..."
+    curl -X POST -H "Content-Type: application/json" -d '{"query":"mutation { dealPublishNow }"}' http://localhost:8080/graphql/query | jq
+    # now deal stuck in Status	"Sealer: WaitDeals",
+    # TODO
+    # Option 1: autopublish config.toml for miner,
+    #    but devnet.go will edit the config.toml changes... parallel sed replace may cause race condition?
+    # Option 2: "manually use CLI to babysit the deal forward"
+    #    lotus-miner sectors seal [command options] <sectorNum>
+    # lets try option 2 manually first. Use the default devnet miner settings.
+    # ...
+    # babysit_deal_sealing
 }
+
+function babysit_deal_sealing() {
+    # force it thru with cli...
+    ./lotus-miner sectors list
+    # sector stuck in "WaitDeals", lets force it to seal:
+    ./lotus-miner sectors seal 2
+
+    # now sector is in "SubmitPreCommitBatch"
+    #  list sectors waiting in precommit batch queue
+    ./lotus-miner sectors batching precommit
+    #  send a batch now
+    ./lotus-miner sectors batching precommit --publish-now
+
+    # now sector is in "SubmitCommitAggregate"
+    ./lotus-miner sectors batching commit
+    ./lotus-miner sectors batching commit --publish-now
+
+    ./lotus-miner sectors list
+    # Sector status should move to PrecommitWait -> WaitSeed, CommitWait, Proving -> FinalizeSector
+
+    ./lotus client list-deals
+    # Deal is StorageDealActive.
+}
+
+######## main sequence #######
 
 function build_configure_boost_devnet() { # runtime duration: 5m1s
     clone_boost_repo
