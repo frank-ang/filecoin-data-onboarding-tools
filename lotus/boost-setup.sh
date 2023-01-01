@@ -246,8 +246,30 @@ function watch_sector_sealing() {
     # Sector status should move to PrecommitWait -> WaitSeed, CommitWait, Proving -> FinalizeSector
 }
 
-function test_boost_retrieval() {
-    _echo "TODO test_boost_retrieval..."
+function lotus_client_retrieve_car() {
+    DATA_CID=$1
+    RETRIEVE_CAR_FILE=$2
+    [ -z "$DATA_CID" ] || [ -z "$RETRIEVE_CAR_FILE" ] || [ -z "$MINERID" ] && { echo "DATA_CID, RETRIEVE_CAR_FILE, MINERID required during retrieve"; }
+    LOTUS_RETRIEVE_CMD="lotus client retrieve --car --provider $MINERID $DATA_CID $RETRIEVE_CAR_FILE"
+    _echo "executing command: $LOTUS_RETRIEVE_CMD"
+    $LOTUS_RETRIEVE_CMD
+}
+
+function test_lotus_client_retrieve() {
+    . $TEST_CONFIG_FILE
+    MANIFEST_CSV_FILENAME=$(realpath $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv | head -1 ) # TODO handle >1 csv files?
+    RETRIEVE_CAR_PATH="$RETRIEVE_ROOT/$DATASET_NAME"
+    [[ -z "$MANIFEST_CSV_FILENAME" ]] && { echo "MANIFEST_CSV_FILENAME is required"; exit 1; }
+    [[ -z "$RETRIEVE_CAR_PATH" ]] && { echo "RETRIEVE_CAR_PATH is required"; exit 1; }
+    {
+        read
+        while IFS=, read -r miner_id deal_cid filename data_cid piece_cid start_epoch full_url
+        do 
+            CMD="lotus_client_retrieve_car $deal_cid $RETRIEVE_ROOT/$DATASET_NAME/$filename"
+            _echo "retrieving car, executing: $CMD"
+            $CMD
+        done
+    } < $MANIFEST_CSV_FILENAME
 }
 
 ######## main sequence #######
@@ -278,5 +300,5 @@ function setup_boost_devnet() {
     boost init # client
     fund_wallets
     test_boost_deal # runtime duration approx: 8m39s (2022-12-30)
-    # TODO verify deal
+    test_lotus_client_retrieve
 }
