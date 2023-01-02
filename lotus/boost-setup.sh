@@ -197,6 +197,7 @@ function test_boost_deal() {
     sleep 30
     _echo "publishing deal now..."
     curl -X POST -H "Content-Type: application/json" -d '{"query":"mutation { dealPublishNow }"}' http://localhost:8080/graphql/query | jq
+    # Deal goes from AwaitPublishConfirmation -> WaitDeals, and stops there.
     # at this point, deals are stuck in Status "Sealer: WaitDeals",
     # Solutions:
     # Option 1: hot-edit config.toml before miner starts,
@@ -294,8 +295,9 @@ function test_singularity_boost() {
     test_singularity_prep
     test_singularity_repl
     wait_singularity_manifest
-    wait_miner_receive_all_deals
-    test_boost_import
+    sleep 30 # wait_miner_receive_all_deals # TODO Need boost method. 
+    test_boost_import # deal goes into Ready to Publish
+    _echo "[boost] publishing deal now..." && curl -X POST -H "Content-Type: application/json" -d '{"query":"mutation { dealPublishNow }"}' http://localhost:8080/graphql/query | jq
     wait_seal_all_deals
     sleep 1
     setup_singularity_index
@@ -330,8 +332,8 @@ function setup_boost_devnet() {
     build_configure_boost_devnet
     boost init # client
     fund_wallets
-    test_boost_deal # runtime duration approx: 8m39s (2022-12-30)
-    #test_lotus_client_retrieve
+    #test_boost_deal # runtime duration approx: 8m39s (2022-12-30)
+    #test_lotus_client_retrieve # broken, besides, lotus tests are too low-level.
 
-    #test_singularity_boost
+    test_singularity_boost
 }

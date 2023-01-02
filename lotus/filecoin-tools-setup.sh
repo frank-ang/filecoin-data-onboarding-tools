@@ -204,6 +204,8 @@ function setup_ipfs() {
     ipfs --version
     ipfs init --profile server
     ipfs config --json Swarm.ResourceMgr.Limits.System.FD: 8192
+    cp -f $HOME/.ipfs/config $HOME/.ipfs/config.bak
+    sed -i 's|\("Gateway": \)"/ip4/.*/tcp/.*",|\1"/ip4/0.0.0.0/tcp/8081",|g' $HOME/.ipfs/config # avoid port conflict with boostd
 }
 
 function start_ipfs() {

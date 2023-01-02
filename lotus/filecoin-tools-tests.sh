@@ -215,8 +215,8 @@ function setup_singularity_index() {
     #export DNSLINK_TXT_RECORD=$(echo $INDEX_CREATE_CMD_OUT | sed -n -r 's/^.+("dnslink=.*$)/\1/p' | tr -d '"')
     #echo "DNSLink TXT record to be updated into DNS: $DNSLINK_TXT_RECORD"
     export INDEX_ROOT_IPFS=$(echo $INDEX_CREATE_CMD_OUT | sed -n -r 's/^.+"dnslink=(.*$)/\1/p' | tr -d '"')
-    _echo "INDEX_ROOT_CID=$INDEX_ROOT_IPFS"
-    echo "export INDEX_ROOT_CID=$INDEX_ROOT_IPFS" >> $TEST_CONFIG_FILE
+    _echo "INDEX_ROOT_IPFS=$INDEX_ROOT_IPFS"
+    echo "export INDEX_ROOT_IPFS=$INDEX_ROOT_IPFS" >> $TEST_CONFIG_FILE
 }
 
 function update_dns_txt_record_route53() {
