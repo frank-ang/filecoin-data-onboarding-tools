@@ -96,7 +96,8 @@ function test_singularity_repl() {
     START_DELAY_DAYS=$(( $CURRENT_EPOCH / 2880 + 1 )) # 1 day floor.
     _echo "CURRENT_EPOCH: $CURRENT_EPOCH , START_DELAY_DAYS: $START_DELAY_DAYS"
     DURATION_DAYS=180
-    PRICE="953" # TODO hardcoded magic number
+    PRICE="953" # TODO. hardcoded magic number "953" works for legacy deals.
+    if $BOOST_TEST_MODE; then PRICE="2"; fi # TODO. another hardcoded magic number. compute dynamically.
     CSV_DIR="$SINGULARITY_CSV_ROOT/$DATASET_NAME"
     REPL_CMD_IMMEDIATE_DEPRECATED="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS \
         --max-deals 10 --verified false --price $PRICE --output-csv $CSV_DIR $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"

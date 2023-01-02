@@ -35,6 +35,9 @@ export NVM_DIR="$HOME/.nvm"
 . "$NVM_DIR/bash_completion"
 export MINERID="t01000"
 
+# toggles stuff
+export BOOST_TEST_MODE=false
+
 . $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
 . $(dirname $(realpath $0))"/filecoin-tools-tests.sh" # import test functions.
 . $(dirname $(realpath $0))"/boost-setup.sh" # import boost functions.
@@ -279,6 +282,7 @@ function full_build_test_boost() {
 }
 
 function run() {
+    export BOOST_TEST_MODE=true
     full_build_test_boost
     # full_build_test_legacy
 }

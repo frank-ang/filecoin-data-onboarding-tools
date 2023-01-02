@@ -214,20 +214,18 @@ function babysit_deal_sealing() {
     # push the sector thru sealing.
     _echo "pushing the deal through. current sectors list:" && lotus-miner sectors list
     NUM_REGEX='^[0-9]+$'
-    TIMEOUT=60
+    TIMEOUT=120
     SLEEP_INTERVAL_SECS=5
-    if ! [[ "$SECTOR_ID" =~ $NUM_REGEX ]] && [ "$TIMEOUT" -ge 0 ]; then
+    until [[ "$SECTOR_ID" =~ $NUM_REGEX ]] || [ "$TIMEOUT" -le 0 ]; do
         SECTOR_ID=$(lotus-miner sectors list | grep WaitDeals | tail -1 | awk '{print $1}' )
         _echo "SECTOR_ID: $SECTOR_ID , TIMEOUT: $TIMEOUT"
         TIMEOUT=$(( TIMEOUT - $SLEEP_INTERVAL_SECS))
-        [ "$TIMEOUT" -lt 0 ] && _error "Timed out waiting for a sector with state: WaitDeals"
+        [ "$TIMEOUT" -le 0 ] && _error "Timed out waiting for a sector with state: WaitDeals"
         sleep $SLEEP_INTERVAL_SECS
-    fi
+    done
     _echo "Sector ID in WaitDeals state: $SECTOR_ID"
-
-    # sector stuck in "WaitDeals", lets force it to seal:
     [[ -z "$SECTOR_ID" ]] && { _error "SECTOR_ID is required"; }
-    lotus-miner sectors seal $SECTOR_ID
+    lotus-miner sectors seal $SECTOR_ID # sector in state "WaitDeals", lets force it to seal.
     watch_sector_sealing $SECTOR_ID
 }
 
@@ -286,6 +284,13 @@ function test_boost_import() {
     _echo "CAR files imported into boost."
 }
 
+function publish_boost_deals() {
+    sleep 10
+    _echo "publishing boost deals..."
+    curl -X POST -H "Content-Type: application/json" -d '{"query":"mutation { dealPublishNow }"}' http://localhost:8080/graphql/query | jq
+    sleep 30 # pause again ....
+    # deal should now be at WaitDeals/
+}
 
 function test_singularity_boost() {
     _echo "test_singularity for boost starting..."
@@ -295,17 +300,15 @@ function test_singularity_boost() {
     test_singularity_prep
     test_singularity_repl
     wait_singularity_manifest
-    sleep 30 # wait_miner_receive_all_deals # TODO Need boost method. 
-    test_boost_import # deal goes into Ready to Publish
-    _echo "[boost] publishing deal now..." && curl -X POST -H "Content-Type: application/json" -d '{"query":"mutation { dealPublishNow }"}' http://localhost:8080/graphql/query | jq
-    wait_seal_all_deals
+    sleep 30 # wait_miner_receive_all_deals # TODO poll boost. 
+    test_boost_import # deal goes into state: Ready to Publish. 
+    publish_boost_deals
+    babysit_deal_sealing
     sleep 1
     setup_singularity_index
     retry 5 test_singularity_retrieve
     _echo "test_singularity completed."
 }
-
-######## main sequence #######
 
 function build_configure_boost_devnet() { # runtime duration: 5m1s
     clone_boost_repo
@@ -332,6 +335,8 @@ function setup_boost_devnet() {
     build_configure_boost_devnet
     boost init # client
     fund_wallets
+    start_singularity
+    sleep 10
     #test_boost_deal # runtime duration approx: 8m39s (2022-12-30)
     #test_lotus_client_retrieve # broken, besides, lotus tests are too low-level.
 
