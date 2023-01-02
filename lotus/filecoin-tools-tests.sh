@@ -104,7 +104,7 @@ function test_singularity_repl() {
     set -x
     singularity repl start --max-deals 2 --cron-schedule '*/2 * * * *' --cron-max-deals 200 --cron-max-pending-deals 2 \
                         --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --verified false --price $PRICE \
-                        --output-csv $CSV_DIR $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS
+                        --output-csv $CSV_DIR $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS  # TODO set CLIENT_WALLET_ADDRESS for boost.
     set +x
     sleep 1
     export REPL_ID=$(singularity repl list | grep $DATASET_ID | sed -n -r 's/^│[[:space:]]+[0-9]+[[:space:]]+│[[:space:]]*'\''([^'\'']*).*/\1/p')

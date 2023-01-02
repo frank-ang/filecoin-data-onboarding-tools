@@ -1,7 +1,8 @@
 #!/bin/bash
 
 . $(dirname $(realpath $0))"/filecoin-tools-common.sh"
-BOOST_ENV_FILE=$(dirname $(realpath $0))"/boost.env"
+BOOST_ENV_FILE=$TEST_CONFIG_FILE  # deprecated, lets use one single config file. Was: $(dirname $(realpath $0))"/boost.env"
+BOOST_IMPORT_SCRIPT=$(dirname $(realpath $0))"/boost-import-car.sh"
 ulimit -n 1048576
 PROJECT_HOME=$HOME
 BOOST_PATH=$HOME/.boost
@@ -161,6 +162,7 @@ function fund_wallets() {
     [[ -z "$FULLNODE_API_INFO" ]] && { _error "FULLNODE_API_INFO is required"; }
     export BOOST_INIT_CLIENT_WALLET=`boost wallet default`
     echo "export BOOST_INIT_CLIENT_WALLET=$BOOST_INIT_CLIENT_WALLET" >> $BOOST_ENV_FILE
+    echo "export CLIENT_WALLET_ADDRESS=$BOOST_INIT_CLIENT_WALLET" >> $BOOST_ENV_FILE # wallet variable used by Singularity test
     _echo "funding boost client wallet: $BOOST_INIT_CLIENT_WALLET"
     lotus send --from $LOTUS_WALLET $BOOST_INIT_CLIENT_WALLET 21000000 && sleep 30
     retry 60 boostx market-add -y 8088
@@ -195,21 +197,21 @@ function test_boost_deal() {
     sleep 30
     _echo "publishing deal now..."
     curl -X POST -H "Content-Type: application/json" -d '{"query":"mutation { dealPublishNow }"}' http://localhost:8080/graphql/query | jq
-    # now deal stuck in Status	"Sealer: WaitDeals",
-    # TODO
-    # Option 1: autopublish config.toml for miner,
-    #    but devnet.go will edit the config.toml changes... parallel sed replace may cause race condition?
+    # at this point, deals are stuck in Status "Sealer: WaitDeals",
+    # Solutions:
+    # Option 1: hot-edit config.toml before miner starts,
+    #    devnet.go already edited the config. Can try a parallel sed replace, but may cause race condition?
     # Option 2: "manually use CLI to babysit the deal forward"
     #    lotus-miner sectors seal [command options] <sectorNum>
     # lets try option 2 manually first. Use the default devnet miner settings.
     # ...
+    _echo "waiting for miner sector state to enter WaitDeals" && sleep 30
     babysit_deal_sealing
 }
 
 function babysit_deal_sealing() {
     # push the sector thru sealing.
-    lotus-miner sectors list
-    SECTOR_ID="INVALID"
+    _echo "pushing the deal through. current sectors list:" && lotus-miner sectors list
     NUM_REGEX='^[0-9]+$'
     TIMEOUT=60
     SLEEP_INTERVAL_SECS=5
@@ -243,7 +245,7 @@ function watch_sector_sealing() {
         sleep $SLEEP_INTERVAL_SECS
     done
     lotus-miner sectors list
-    # Sector status should move to PrecommitWait -> WaitSeed, CommitWait, Proving -> FinalizeSector
+    # Sector status moves thru Packing, PreCommit2, PrecommitWait, WaitSeed, Committing, Proving, FinalizeSector
 }
 
 function lotus_client_retrieve_car() {
@@ -255,8 +257,7 @@ function lotus_client_retrieve_car() {
     $LOTUS_RETRIEVE_CMD
 }
 
-function test_lotus_client_retrieve() {
-    . $TEST_CONFIG_FILE
+function test_lotus_client_retrieve() { # lotus retrieve may not use Singularity CSV. Lookup the car some other way? Or skip this test?
     MANIFEST_CSV_FILENAME=$(realpath $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv | head -1 ) # TODO handle >1 csv files?
     RETRIEVE_CAR_PATH="$RETRIEVE_ROOT/$DATASET_NAME"
     [[ -z "$MANIFEST_CSV_FILENAME" ]] && { echo "MANIFEST_CSV_FILENAME is required"; exit 1; }
@@ -270,6 +271,36 @@ function test_lotus_client_retrieve() {
             $CMD
         done
     } < $MANIFEST_CSV_FILENAME
+}
+
+
+function test_boost_import() {
+    _echo "importing data into boost..."
+    . $TEST_CONFIG_FILE
+    CSV_PATH=$(realpath $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv | head -1 ) # TODO handle >1 csv files?
+    # boostd import-data [command options] <proposal CID> <file> or <deal UUID> <file>
+    CMD="$BOOST_IMPORT_SCRIPT $CSV_PATH /tmp/car/$DATASET_NAME"
+    _echo "[importing]: $CMD" 
+    $CMD
+    _echo "CAR files imported into boost."
+}
+
+
+function test_singularity_boost() {
+    _echo "test_singularity for boost starting..."
+    . $TEST_CONFIG_FILE
+    reset_test_data
+    generate_test_files "1" "1024"
+    test_singularity_prep
+    test_singularity_repl
+    wait_singularity_manifest
+    wait_miner_receive_all_deals
+    test_boost_import
+    wait_seal_all_deals
+    sleep 1
+    setup_singularity_index
+    retry 5 test_singularity_retrieve
+    _echo "test_singularity completed."
 }
 
 ######## main sequence #######
@@ -300,5 +331,7 @@ function setup_boost_devnet() {
     boost init # client
     fund_wallets
     test_boost_deal # runtime duration approx: 8m39s (2022-12-30)
-    test_lotus_client_retrieve
+    #test_lotus_client_retrieve
+
+    #test_singularity_boost
 }

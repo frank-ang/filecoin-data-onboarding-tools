@@ -307,3 +307,13 @@ function lotus_retrieve_car() {
     _echo "executing command: $LOTUS_RETRIEVE_CMD"
     $LOTUS_RETRIEVE_CMD
 }
+
+function cur_block_height() {
+    echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
+    # lotus cli uses a pre-generated API token locally at ~/.lotus/token
+    lotus auth create-token --perm read # write sign admin
+    lotus auth create-token --perm write
+    lotus auth create-token --perm sign
+    lotus auth create-token --perm admin
+    lotus auth create-token
+}
