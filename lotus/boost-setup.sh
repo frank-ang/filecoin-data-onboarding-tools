@@ -7,6 +7,22 @@ ulimit -n 1048576
 PROJECT_HOME=$HOME
 BOOST_PATH=$HOME/.boost
 
+function setup_boost_devnet() {
+    build_lotus_devnet_for_boost
+    build_configure_boost_devnet
+    boost init # client
+    fund_wallets
+    start_ipfs
+    start_singularity
+    sleep 10
+    # try if re-introducing plain boost deal will somehow avoid miner sealing failure: WARN	sectors	pipeline/fsm.go:792	sector 1 got error event sealing.SectorCommitFailed: proof validation failed, sector not found in sector set after cron
+    test_boost_deal # runtime duration approx: 8m39s (2022-12-30)
+    #test_lotus_client_retrieve # broken, besides, lotus tests are too low-level.
+
+    test_singularity_boost
+}
+
+
 function build_lotus_devnet_for_boost() {
     _echo "Rebuilding lotus devnet for boost..."
     stop_daemons
@@ -33,6 +49,40 @@ function build_lotus_devnet_for_boost() {
     _echo "Lotus installed complete. Lotus version: "
     lotus --version
 }
+
+
+function build_configure_boost_devnet() { # runtime duration: 5m1s
+    clone_boost_repo
+    build_boost_devnet
+    start_boost_devnet
+    wait_boost_miner_up
+    get_miner_auth_tokens
+    create_boost_wallets
+    add_funds_boost_wallets
+    init_boost_repo
+    setup_maddr
+    start_boostd
+    retry 40 verify_boost_install
+}
+
+function test_singularity_boost() {
+    _echo "test_singularity for boost starting..."
+    . $TEST_CONFIG_FILE
+    reset_test_data
+    generate_test_files "1" "1024"
+    test_singularity_prep
+    test_singularity_repl
+    wait_singularity_manifest
+    sleep 60 # wait_miner_receive_all_deals # TODO poll boost.
+    test_boost_import # deal goes into state: Ready to Publish.
+    publish_boost_deals
+    babysit_deal_sealing
+    sleep 1
+    setup_singularity_index
+    retry 5 test_singularity_retrieve
+    _echo "test_singularity completed."
+}
+
 
 function clone_boost_repo() {
     rm -rf ~/.lotusmarkets ~/.lotus ~/.lotusminer ~/.genesis_sectors ~/.genesis-sectors
@@ -292,54 +342,9 @@ function publish_boost_deals() {
     # deal should now be at WaitDeals/
 }
 
-function test_singularity_boost() {
-    _echo "test_singularity for boost starting..."
-    . $TEST_CONFIG_FILE
-    reset_test_data
-    generate_test_files "1" "1024"
-    test_singularity_prep
-    test_singularity_repl
-    wait_singularity_manifest
-    sleep 30 # wait_miner_receive_all_deals # TODO poll boost. 
-    test_boost_import # deal goes into state: Ready to Publish. 
-    publish_boost_deals
-    babysit_deal_sealing
-    sleep 1
-    setup_singularity_index
-    retry 5 test_singularity_retrieve
-    _echo "test_singularity completed."
-}
-
-function build_configure_boost_devnet() { # runtime duration: 5m1s
-    clone_boost_repo
-    build_boost_devnet
-    start_boost_devnet
-    wait_boost_miner_up
-    get_miner_auth_tokens
-    create_boost_wallets
-    add_funds_boost_wallets
-    init_boost_repo
-    setup_maddr
-    start_boostd
-    retry 40 verify_boost_install
-}
-
 function verify_boost_install() {
     curl -s -X POST -H "Content-Type: application/json" -d '{"query":"query {epoch { Epoch }}"}' http://localhost:8080/graphql/query
     echo
     curl http://localhost:8080 | grep "Boost"
 }
 
-function setup_boost_devnet() {
-    build_lotus_devnet_for_boost
-    build_configure_boost_devnet
-    boost init # client
-    fund_wallets
-    start_singularity
-    sleep 10
-    # try if re-introducing plain boost deal will somehow avoid miner sealing failure: WARN	sectors	pipeline/fsm.go:792	sector 1 got error event sealing.SectorCommitFailed: proof validation failed, sector not found in sector set after cron
-    test_boost_deal # runtime duration approx: 8m39s (2022-12-30)
-    #test_lotus_client_retrieve # broken, besides, lotus tests are too low-level.
-
-    test_singularity_boost
-}
