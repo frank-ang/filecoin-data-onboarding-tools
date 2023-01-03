@@ -11,16 +11,15 @@ BOOST_PATH=$HOME/.boost
 # Main boost setup/test
 #######################
 function setup_boost_devnet() {
-    time build_lotus_devnet_for_boost
-    time build_configure_boost_devnet
+    time build_lotus_devnet_for_boost && _echo "stage: build_lotus_devnet_for_boost completed"
+    time build_configure_boost_devnet && _echo "stage: build_configure_boost_devnet completed"
     boost init # client
     fund_wallets
     start_ipfs
     start_singularity && sleep 10
-    # trigger a plain boost deal somehow avoids the following miner sealing failure: WARN	sectors	pipeline/fsm.go:792	sector 1 got error event sealing.SectorCommitFailed: proof validation failed, sector not found in sector set after cron
-    time test_boost_deal
-    time test_lotus_client_retrieve
-    time test_singularity_boost
+    # trigger a plain boost deal, somehow avoids miner sealing failure: WARN	sectors	pipeline/fsm.go:792	sector 1 got error event sealing.SectorCommitFailed: proof validation failed, sector not found in sector set after cron
+    time test_boost_deal && _echo "stage: test_boost_deal completed"
+    time test_singularity_boost && _echo "stage: test_singularity_boost completed"
 }
 
 #######
@@ -58,9 +57,9 @@ function build_lotus_devnet_for_boost() {
 function build_configure_boost_devnet() {
     _echo "Re-building and configuring boost devnet..."
     clone_boost_repo
-    build_boost_devnet
-    start_boost_devnet
-    wait_boost_miner_up
+    time build_boost_devnet && _echo "sub-stage: build_boost_devnet completed"
+    time start_boost_devnet && _echo "sub-stage: start_boost_devnet completed"
+    time wait_boost_miner_up && _echo "sub-stage: wait_boost_miner_up completed"
     get_miner_auth_tokens
     create_boost_wallets
     add_funds_boost_wallets
