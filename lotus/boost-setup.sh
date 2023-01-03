@@ -337,7 +337,8 @@ function setup_boost_devnet() {
     fund_wallets
     start_singularity
     sleep 10
-    #test_boost_deal # runtime duration approx: 8m39s (2022-12-30)
+    # try if re-introducing plain boost deal will somehow avoid miner sealing failure: WARN	sectors	pipeline/fsm.go:792	sector 1 got error event sealing.SectorCommitFailed: proof validation failed, sector not found in sector set after cron
+    test_boost_deal # runtime duration approx: 8m39s (2022-12-30)
     #test_lotus_client_retrieve # broken, besides, lotus tests are too low-level.
 
     test_singularity_boost
