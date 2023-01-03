@@ -1,30 +1,34 @@
 #!/bin/bash
 
 . $(dirname $(realpath $0))"/filecoin-tools-common.sh"
-BOOST_ENV_FILE=$TEST_CONFIG_FILE  # deprecated, lets use one single config file. Was: $(dirname $(realpath $0))"/boost.env"
+BOOST_ENV_FILE=$TEST_CONFIG_FILE  # lets share the same config file across tests.
 BOOST_IMPORT_SCRIPT=$(dirname $(realpath $0))"/boost-import-car.sh"
 ulimit -n 1048576
 PROJECT_HOME=$HOME
 BOOST_PATH=$HOME/.boost
 
+#######################
+# Main boost setup/test
+#######################
 function setup_boost_devnet() {
-    build_lotus_devnet_for_boost
-    build_configure_boost_devnet
+    time build_lotus_devnet_for_boost
+    time build_configure_boost_devnet
     boost init # client
     fund_wallets
     start_ipfs
-    start_singularity
-    sleep 10
-    # try if re-introducing plain boost deal will somehow avoid miner sealing failure: WARN	sectors	pipeline/fsm.go:792	sector 1 got error event sealing.SectorCommitFailed: proof validation failed, sector not found in sector set after cron
-    test_boost_deal # runtime duration approx: 8m39s (2022-12-30)
-    #test_lotus_client_retrieve # broken, besides, lotus tests are too low-level.
-
-    test_singularity_boost
+    start_singularity && sleep 10
+    # trigger a plain boost deal somehow avoids the following miner sealing failure: WARN	sectors	pipeline/fsm.go:792	sector 1 got error event sealing.SectorCommitFailed: proof validation failed, sector not found in sector set after cron
+    time test_boost_deal
+    time test_lotus_client_retrieve
+    time test_singularity_boost
 }
 
+#######
+# Build
+#######
 
 function build_lotus_devnet_for_boost() {
-    _echo "Rebuilding lotus devnet for boost..."
+    _echo "Re-building lotus devnet for boost..."
     stop_daemons
     rm -rf ~/.lotusmarkets ~/.lotus ~/.lotusminer ~/.genesis_sectors ~/.genesis-sectors
     _echo "Installing prereqs..."
@@ -51,7 +55,8 @@ function build_lotus_devnet_for_boost() {
 }
 
 
-function build_configure_boost_devnet() { # runtime duration: 5m1s
+function build_configure_boost_devnet() {
+    _echo "Re-building and configuring boost devnet..."
     clone_boost_repo
     build_boost_devnet
     start_boost_devnet
@@ -64,25 +69,6 @@ function build_configure_boost_devnet() { # runtime duration: 5m1s
     start_boostd
     retry 40 verify_boost_install
 }
-
-function test_singularity_boost() {
-    _echo "test_singularity for boost starting..."
-    . $TEST_CONFIG_FILE
-    reset_test_data
-    generate_test_files "1" "1024"
-    test_singularity_prep
-    test_singularity_repl
-    wait_singularity_manifest
-    sleep 60 # wait_miner_receive_all_deals # TODO poll boost.
-    test_boost_import # deal goes into state: Ready to Publish.
-    publish_boost_deals
-    babysit_deal_sealing
-    sleep 1
-    setup_singularity_index
-    retry 5 test_singularity_retrieve
-    _echo "test_singularity completed."
-}
-
 
 function clone_boost_repo() {
     rm -rf ~/.lotusmarkets ~/.lotus ~/.lotusminer ~/.genesis_sectors ~/.genesis-sectors
@@ -111,12 +97,22 @@ function start_boost_devnet() {
     nohup ./devnet >> devnet.log 2>&1 &
 }
 
+function verify_boost_install() {
+    curl -s -X POST -H "Content-Type: application/json" -d '{"query":"query {epoch { Epoch }}"}' http://localhost:8080/graphql/query
+    echo
+    curl http://localhost:8080 | grep "Boost"
+}
+
 function wait_boost_miner_up() {
     unset MINER_API_INFO
     unset FULLNODE_API_INFO
     lotus-miner wait-api --timeout 1200s
     retry 20 lotus-miner auth api-info --perm=admin
 }
+
+###########
+# Configure
+###########
 
 function get_miner_auth_tokens() {
     export ENV_MINER_API_INFO=`lotus-miner auth api-info --perm=admin`
@@ -223,6 +219,10 @@ function fund_wallets() {
     lotus wallet default
 }
 
+########
+# Tests
+########
+
 function test_boost_deal() {
     _echo "testing boost deal..."
     cd $HOME/boost
@@ -260,12 +260,50 @@ function test_boost_deal() {
     babysit_deal_sealing
 }
 
+function test_singularity_boost() {
+    _echo "Testing Singularity with Boost ..."
+    . $TEST_CONFIG_FILE
+    reset_test_data
+    generate_test_files "1" "1024"
+    test_singularity_prep
+    test_singularity_repl
+    wait_singularity_manifest
+    sleep 60 # wait_miner_receive_all_deals # TODO poll boost.
+    test_boost_import # deal goes into state: Ready to Publish.
+    publish_boost_deals
+    babysit_deal_sealing
+    sleep 1
+    setup_singularity_index
+    retry 5 test_singularity_retrieve
+    _echo "test_singularity completed."
+}
+
+function test_boost_import() {
+    _echo "importing data into boost..."
+    . $TEST_CONFIG_FILE
+    CSV_PATH=$(realpath $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv | head -1 ) # TODO handle >1 csv files?
+    # boostd import-data [command options] <proposal CID> <file> or <deal UUID> <file>
+    CMD="$BOOST_IMPORT_SCRIPT $CSV_PATH /tmp/car/$DATASET_NAME"
+    _echo "[importing]: $CMD" 
+    $CMD
+    _echo "CAR files imported into boost."
+}
+
+function publish_boost_deals() {
+    sleep 10
+    _echo "publishing boost deals..."
+    curl -X POST -H "Content-Type: application/json" -d '{"query":"mutation { dealPublishNow }"}' http://localhost:8080/graphql/query | jq
+    sleep 30 # pause again ....
+    # deal should now be at WaitDeals/
+}
+
 function babysit_deal_sealing() {
     # push the sector thru sealing.
     _echo "pushing the deal through. current sectors list:" && lotus-miner sectors list
     NUM_REGEX='^[0-9]+$'
     TIMEOUT=120
     SLEEP_INTERVAL_SECS=5
+    unset SECTOR_ID
     until [[ "$SECTOR_ID" =~ $NUM_REGEX ]] || [ "$TIMEOUT" -le 0 ]; do
         SECTOR_ID=$(lotus-miner sectors list | grep WaitDeals | tail -1 | awk '{print $1}' )
         _echo "SECTOR_ID: $SECTOR_ID , TIMEOUT: $TIMEOUT"
@@ -274,6 +312,7 @@ function babysit_deal_sealing() {
         sleep $SLEEP_INTERVAL_SECS
     done
     _echo "Sector ID in WaitDeals state: $SECTOR_ID"
+    # _echo "[debug] listing sectors in WaitDeals, again...: " && lotus-miner sectors list | grep WaitDeals
     [[ -z "$SECTOR_ID" ]] && { _error "SECTOR_ID is required"; }
     lotus-miner sectors seal $SECTOR_ID # sector in state "WaitDeals", lets force it to seal.
     watch_sector_sealing $SECTOR_ID
@@ -297,16 +336,8 @@ function watch_sector_sealing() {
     # Sector status moves thru Packing, PreCommit2, PrecommitWait, WaitSeed, Committing, Proving, FinalizeSector
 }
 
-function lotus_client_retrieve_car() {
-    DATA_CID=$1
-    RETRIEVE_CAR_FILE=$2
-    [ -z "$DATA_CID" ] || [ -z "$RETRIEVE_CAR_FILE" ] || [ -z "$MINERID" ] && { echo "DATA_CID, RETRIEVE_CAR_FILE, MINERID required during retrieve"; }
-    LOTUS_RETRIEVE_CMD="lotus client retrieve --car --provider $MINERID $DATA_CID $RETRIEVE_CAR_FILE"
-    _echo "executing command: $LOTUS_RETRIEVE_CMD"
-    $LOTUS_RETRIEVE_CMD
-}
-
-function test_lotus_client_retrieve() { # lotus retrieve may not use Singularity CSV. Lookup the car some other way? Or skip this test?
+function test_lotus_client_retrieve() { # plain lotus retrieve of data from Singularity CSV.
+    _echo "testing lotus client retrieve ..."
     MANIFEST_CSV_FILENAME=$(realpath $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv | head -1 ) # TODO handle >1 csv files?
     RETRIEVE_CAR_PATH="$RETRIEVE_ROOT/$DATASET_NAME"
     [[ -z "$MANIFEST_CSV_FILENAME" ]] && { echo "MANIFEST_CSV_FILENAME is required"; exit 1; }
@@ -322,29 +353,11 @@ function test_lotus_client_retrieve() { # lotus retrieve may not use Singularity
     } < $MANIFEST_CSV_FILENAME
 }
 
-
-function test_boost_import() {
-    _echo "importing data into boost..."
-    . $TEST_CONFIG_FILE
-    CSV_PATH=$(realpath $SINGULARITY_CSV_ROOT/$DATASET_NAME/*.csv | head -1 ) # TODO handle >1 csv files?
-    # boostd import-data [command options] <proposal CID> <file> or <deal UUID> <file>
-    CMD="$BOOST_IMPORT_SCRIPT $CSV_PATH /tmp/car/$DATASET_NAME"
-    _echo "[importing]: $CMD" 
-    $CMD
-    _echo "CAR files imported into boost."
+function lotus_client_retrieve_car() {
+    DATA_CID=$1
+    RETRIEVE_CAR_FILE=$2
+    [ -z "$DATA_CID" ] || [ -z "$RETRIEVE_CAR_FILE" ] || [ -z "$MINERID" ] && { echo "DATA_CID, RETRIEVE_CAR_FILE, MINERID required during retrieve"; }
+    LOTUS_RETRIEVE_CMD="lotus client retrieve --car --provider $MINERID $DATA_CID $RETRIEVE_CAR_FILE"
+    _echo "executing command: $LOTUS_RETRIEVE_CMD"
+    $LOTUS_RETRIEVE_CMD
 }
-
-function publish_boost_deals() {
-    sleep 10
-    _echo "publishing boost deals..."
-    curl -X POST -H "Content-Type: application/json" -d '{"query":"mutation { dealPublishNow }"}' http://localhost:8080/graphql/query | jq
-    sleep 30 # pause again ....
-    # deal should now be at WaitDeals/
-}
-
-function verify_boost_install() {
-    curl -s -X POST -H "Content-Type: application/json" -d '{"query":"query {epoch { Epoch }}"}' http://localhost:8080/graphql/query
-    echo
-    curl http://localhost:8080 | grep "Boost"
-}
-
