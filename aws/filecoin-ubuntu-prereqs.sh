@@ -5,9 +5,9 @@
 
 function install_dependencies() {
     echo "## Installing Dependencies..."
-    apt install -y git openssl gcc rsync make jq unzip nfs-common
+    apt install -y git openssl gcc rsync make jq unzip nfs-common nginx
     apt install -y software-properties-common
-    apt install -y sysstat iotop net-tools # handy tools.
+    apt install -y sysstat iotop net-tools
 }
 
 function install_node() {

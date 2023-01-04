@@ -90,7 +90,7 @@ function setup_boost_ui() {
     npm run build
     npm install -g serve
     nohup serve -s build >> /var/log/boost-ui.log 2>&1 &
-    # Browser Access: http://localhost:8080 , via SSH tunnel ssh -L 8080:localhost:8080 myserver
+    # Browser Access: http://localhost:8080 , via SSH tunnel: ssh -L 8080:localhost:8080 user@remote-host
     # API Access: requires BOOST_API_INFO environment variable
     # Demonstration of API Access
     sleep 2
@@ -306,4 +306,14 @@ function lotus_retrieve_car() {
     LOTUS_RETRIEVE_CMD="lotus client retrieve --car --provider $MINERID $DATA_CID $RETRIEVE_CAR_FILE"
     _echo "executing command: $LOTUS_RETRIEVE_CMD"
     $LOTUS_RETRIEVE_CMD
+}
+
+function cur_block_height() {
+    echo "FULLNODE_API_INFO: $FULLNODE_API_INFO"
+    # lotus cli uses a pre-generated API token locally at ~/.lotus/token
+    lotus auth create-token --perm read # write sign admin
+    lotus auth create-token --perm write
+    lotus auth create-token --perm sign
+    lotus auth create-token --perm admin
+    lotus auth create-token
 }

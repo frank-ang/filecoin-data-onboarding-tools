@@ -31,38 +31,32 @@ Parameters:
   VPC:
     Description: VPC ID.
     Type: AWS::EC2::VPC::Id
-    Default: vpc-0b66bf645342935b5
-    # Hardcoded
+    #Default: vpc-0b66bf645342935b5
 
   AZ:
     Description: Availability Zone placement
     Type: AWS::EC2::AvailabilityZone::Name
-    Default: ap-southeast-1a
-    # Hardcoded
+    #Default: ap-southeast-1a
 
   SubnetId:
     Description: Subnet ID placement
     Type: AWS::EC2::Subnet::Id
-    Default: subnet-0728cf0c3c454fff1
-    # Hardcoded
+    #Default: subnet-0728cf0c3c454fff1
 
   SecurityGroup:
     Type: AWS::EC2::SecurityGroup::Id
     Description: Security group ID
-    Default: sg-06788998bef10dbb7
-    # Hardcoded
+    #Default: sg-06788998bef10dbb7
 
   KeyPair:
     Description: Key Pair Name
     Type: AWS::EC2::KeyPair::KeyName
-    Default: mac2021
-    # Hardcoded
+    #Default: mac2021
 
   InstanceProfile:
     Description: EC2 Instance Profile ARN
     Type: String
-    Default: mySSMManagedInstance
-    # Hardcoded
+    #Default: mySSMManagedInstance
 
   LatestUbuntuFocalAMI:
     Description: Ubuntu AMI
@@ -138,7 +132,7 @@ Resources:
           ./aws/install
           echo "## AWS dependencies installed."
 
-          echo "## Downloading Repo"
+          echo "## Downloading tools repo"
           cd $HOME
           git clone https://github.com/frank-ang/filecoin-data-onboarding-tools.git
           cd ./filecoin-data-onboarding-tools && git fetch && git switch test

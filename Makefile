@@ -1,11 +1,13 @@
 # AWS resources.
 SHELL=/bin/bash
+export AWS_DEFAULT_REGION=us-east-2
+
 STACK_NAME="filecoin-singularity-appliance-test"
 AWS_APPLIANCE_TEMPLATE=aws/filecoin-client-stack.cloudformation.yml
-AWS_APPLIANCE_INSTANCE_ID=$(shell aws cloudformation describe-stacks --stack-name ${STACK_NAME} | jq -r '.Stacks[].Outputs[]|select(.OutputKey=="InstanceId").OutputValue')
-AWS_APPLIANCE_IP=$(shell aws ec2 describe-instances --instance-id ${AWS_APPLIANCE_INSTANCE_ID} | jq -r '.Reservations[].Instances[].PublicIpAddress')
+AWS_APPLIANCE_INSTANCE_ID=$(shell aws cloudformation describe-stacks --stack-name ${STACK_NAME} --region ${AWS_DEFAULT_REGION} | jq -r '.Stacks[].Outputs[]|select(.OutputKey=="InstanceId").OutputValue')
+AWS_APPLIANCE_IP=$(shell aws ec2 describe-instances --instance-id ${AWS_APPLIANCE_INSTANCE_ID} --region ${AWS_DEFAULT_REGION} | jq -r '.Reservations[].Instances[].PublicIpAddress')
 
--include config.mk.gitignore
+-include config.mk.ohio.gitignore
 
 create_appliance:
 	@echo "Creating Singularity appliance AWS stack..."
@@ -48,21 +50,25 @@ connect:
 	ssh ubuntu@${AWS_APPLIANCE_IP}
 
 deploy_script:
-#	scp lotus/filecoin-tools-setup.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/
-#	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/filecoin-tools-setup.sh /root/filecoin-data-onboarding-tools/lotus/"
+	scp lotus/filecoin-tools-setup.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/
+	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/filecoin-tools-setup.sh /root/filecoin-data-onboarding-tools/lotus/"
 	scp lotus/filecoin-tools-tests.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/
 	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/filecoin-tools-tests.sh /root/filecoin-data-onboarding-tools/lotus/"
+	scp lotus/boost-setup.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/
+	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/boost-setup.sh /root/filecoin-data-onboarding-tools/lotus/"
 #	scp lotus/miner-import-car.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/
 #	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/miner-import-car.sh /root/filecoin-data-onboarding-tools/lotus/"
 
 
-connect_boost:
-	@echo "Connecting to boost browser UI at: ${AWS_APPLIANCE_IP}:3000"
-	open -n -a "Google Chrome" --args '--new-window' "http://${AWS_APPLIANCE_IP}:3000"
-# TODO: investigate UX error: Error: Unexpected token '<', "<!doctype "... is not valid JSON
-# ssh -L 3000:localhost:3000 ubuntu@${AWS_APPLIANCE_IP}
-# ssh ubuntu@${AWS_APPLIANCE_IP} -L 3001:${AWS_APPLIANCE_IP}:3000 -fN
+connect_boost: start_tunnel
+	@echo "Connecting to Boost UX: ${AWS_APPLIANCE_IP}:8080"
+	@echo starting local MacOS SSH tunnel...
+	ssh -L 8080:localhost:8080 ubuntu@${AWS_APPLIANCE_IP} &
+	open -n -a "Google Chrome" --args '--new-window' "http://localhost:8080"
 
-tunnel_to_appliance:
+start_tunnel:
 	@echo "Starting local TCP tunnel to: ${AWS_APPLIANCE_IP}"
-	ssh -L 8080:127.0.0.1:8080 ubuntu@${AWS_APPLIANCE_IP}
+	ssh -M -S ~/boost-tunnel-socket.tmp -o "ExitOnForwardFailure yes" -o "StrictHostKeyChecking no" -fN -L 8080:localhost:8080 ubuntu@${AWS_APPLIANCE_IP}
+
+stop_tunnel:
+	ssh -S ~/boost-tunnel-socket.tmp ${AWS_APPLIANCE_IP} -O exit

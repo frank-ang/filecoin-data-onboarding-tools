@@ -13,27 +13,6 @@ TARGET_DEAL_SIZE="2KiB" # devnet. For prod use: "32GiB"
 GEN_TEST_DATA_SCRIPT=$(dirname $(realpath $0))"/gen-test-data.sh"
 MINER_IMPORT_SCRIPT=$(dirname $(realpath $0))"/miner-import-car.sh"
 
-# Retries a command on failure. Increasing backoff interval.
-# $1 - the max number of attempts
-# $2... - the command to run
-# example:
-#   retry 5 ls -ltr foo
-function retry() {
-    local -r -i max_attempts="$1"; shift
-    local -r cmd="$@"
-    local -i attempt_num=1
-    until $cmd
-    do
-        if (( attempt_num == max_attempts ))
-        then
-            _error "exceeded $attempt_num retries executing: $cmd"
-        else
-            echo "Attempt $attempt_num failed. Trying again in $attempt_num seconds..."
-            sleep $(( attempt_num++ ))
-        fi
-    done
-}
-
 
 # Creates test data files with pattern: $DATA_SOURCE_ROOT/$DATASET_NAME/file-$FILE_COUNT
 # generates and sets a random DATASET_NAME
@@ -117,7 +96,8 @@ function test_singularity_repl() {
     START_DELAY_DAYS=$(( $CURRENT_EPOCH / 2880 + 1 )) # 1 day floor.
     _echo "CURRENT_EPOCH: $CURRENT_EPOCH , START_DELAY_DAYS: $START_DELAY_DAYS"
     DURATION_DAYS=180
-    PRICE="953" # TODO hardcoded magic number
+    PRICE="953" # TODO. hardcoded magic number "953" works for legacy deals.
+    if $BOOST_TEST_MODE; then PRICE="2"; fi # TODO. another hardcoded magic number. compute dynamically.
     CSV_DIR="$SINGULARITY_CSV_ROOT/$DATASET_NAME"
     REPL_CMD_IMMEDIATE_DEPRECATED="singularity repl start --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS \
         --max-deals 10 --verified false --price $PRICE --output-csv $CSV_DIR $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS"
@@ -125,7 +105,7 @@ function test_singularity_repl() {
     set -x
     singularity repl start --max-deals 2 --cron-schedule '*/2 * * * *' --cron-max-deals 200 --cron-max-pending-deals 2 \
                         --start-delay $START_DELAY_DAYS --duration $DURATION_DAYS --verified false --price $PRICE \
-                        --output-csv $CSV_DIR $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS
+                        --output-csv $CSV_DIR $DATASET_NAME $MINERID $CLIENT_WALLET_ADDRESS  # TODO set CLIENT_WALLET_ADDRESS for boost.
     set +x
     sleep 1
     export REPL_ID=$(singularity repl list | grep $DATASET_ID | sed -n -r 's/^│[[:space:]]+[0-9]+[[:space:]]+│[[:space:]]*'\''([^'\'']*).*/\1/p')
@@ -236,8 +216,8 @@ function setup_singularity_index() {
     #export DNSLINK_TXT_RECORD=$(echo $INDEX_CREATE_CMD_OUT | sed -n -r 's/^.+("dnslink=.*$)/\1/p' | tr -d '"')
     #echo "DNSLink TXT record to be updated into DNS: $DNSLINK_TXT_RECORD"
     export INDEX_ROOT_IPFS=$(echo $INDEX_CREATE_CMD_OUT | sed -n -r 's/^.+"dnslink=(.*$)/\1/p' | tr -d '"')
-    _echo "INDEX_ROOT_CID=$INDEX_ROOT_IPFS"
-    echo "export INDEX_ROOT_CID=$INDEX_ROOT_IPFS" >> $TEST_CONFIG_FILE
+    _echo "INDEX_ROOT_IPFS=$INDEX_ROOT_IPFS"
+    echo "export INDEX_ROOT_IPFS=$INDEX_ROOT_IPFS" >> $TEST_CONFIG_FILE
 }
 
 function update_dns_txt_record_route53() {
@@ -266,7 +246,7 @@ function update_dns_txt_record_route53() {
 
 function test_singularity_retrieve() {
     #update_dns_txt_record_route53
-    FILENAME="file-1" # Hardcoded
+    FILENAME="file-1" # Hardcoded for test
     RETRIEVE_FILE_PATH=$RETRIEVE_ROOT/$DATASET_NAME
     rm -rf $RETRIEVE_ROOT/$DATASET_NAME && mkdir -p $RETRIEVE_ROOT/$DATASET_NAME
     _exec "singularity-retrieve ls -v singularity:/$INDEX_ROOT_IPFS/"
@@ -334,7 +314,7 @@ function test_singularity() {
 }
 
 
-function exercise_api() {
+function exercise_singularity_api_wip() {
     . $TEST_CONFIG_FILE
     set -x
     curl http://localhost:7001/preparations | jq

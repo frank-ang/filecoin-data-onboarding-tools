@@ -9,6 +9,7 @@
 # https://lotus.filecoin.io/lotus/install/linux/#building-from-source
 
 set -e
+
 export LOTUS_PATH=$HOME/.lotus # $HOME/.lotusDevnetTest/
 export LOTUS_MINER_PATH=$HOME/.lotusminer # $HOME/.lotusminerDevnetTest/
 export LOTUS_SKIP_GENESIS_CHECK=_yes_
@@ -34,31 +35,38 @@ export NVM_DIR="$HOME/.nvm"
 . "$NVM_DIR/bash_completion"
 export MINERID="t01000"
 
+# toggles stuff
+export BOOST_TEST_MODE=false
+
 . $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
 . $(dirname $(realpath $0))"/filecoin-tools-tests.sh" # import test functions.
+. $(dirname $(realpath $0))"/boost-setup.sh" # import boost functions.
 
-function build_lotus() {
+function build_install_lotus() {
     _echo "Rebuilding from source..."
     stop_daemons
-    _echo "## Installing prereqs..."
+    _echo "Installing prereqs..."
     apt install -y mesa-opencl-icd ocl-icd-opencl-dev gcc git bzr jq pkg-config curl clang build-essential hwloc libhwloc-dev wget && sudo apt upgrade -y
     curl https://sh.rustup.rs -sSf > RUSTUP.sh
     sh RUSTUP.sh -y
     rm RUSTUP.sh
     wget -c https://go.dev/dl/go1.18.4.linux-amd64.tar.gz -O - | tar -xz -C /usr/local
     echo "export PATH=$PATH:/usr/local/go/bin" >> ~/.bashrc && source ~/.bashrc
-    _echo "## Building lotus..."
+    _echo "Building lotus..."
     cd $HOME
     rm -rf $LOTUS_PATH
     rm -rf $LOTUS_SOURCE
     git clone https://github.com/filecoin-project/lotus.git
     cd lotus/
-    git checkout releases
+    # git checkout releases
+    git fetch --all
+    git checkout tags/v1.18.0 # boost requirement.
     make clean
     time make 2k
-    _echo "## Installing lotus..."
-    make install
-    _echo "## Lotus installed complete. Lotus version: "`lotus --version`
+    _echo "Installing lotus..."
+    sudo make install
+    install -C ./lotus-seed /usr/local/bin/lotus-seed
+    _echo "Lotus installed complete. Lotus version: "`lotus --version`
 }
 
 function init_daemons() {
@@ -75,7 +83,7 @@ function init_daemons() {
     time ./lotus-seed genesis new localnet.json
     _echo "Create a default address and give it some funds..."
     time ./lotus-seed genesis add-miner localnet.json ~/.genesis-sectors/pre-seal-t01000.json
-    _echo "Starting first node..."
+    _echo "Starting lotus daemon, first time..."
     nohup ./lotus daemon --lotus-make-genesis=devgen.car --genesis-template=localnet.json --bootstrap=false >> /var/log/lotus-daemon.log 2>&1 &
     _echo "Awaiting daemon startup... could take awhile...."
     time _waitLotusStartup "1800s"
@@ -127,10 +135,14 @@ function _waitLotusStartup() {
 
 function stop_daemons() {
     _echo "Killing all daemons..."
+    killall boostd || true
     lotus-miner stop || true
     lotus daemon stop || true
     stop_singularity || true
     stop_ipfs || true
+    killall devnet  || true
+    killall lotus-miner || true
+    killall lotus || true
 }
 
 function start_singularity() {
@@ -186,6 +198,7 @@ function init_singularity() {
 
 function setup_ipfs() {
     _echo "setting up IPFS..."
+    cd /tmp
     wget https://dist.ipfs.tech/kubo/v0.17.0/kubo_v0.17.0_linux-amd64.tar.gz
     tar -xvzf kubo_v0.17.0_linux-amd64.tar.gz
     cd kubo
@@ -194,6 +207,8 @@ function setup_ipfs() {
     ipfs --version
     ipfs init --profile server
     ipfs config --json Swarm.ResourceMgr.Limits.System.FD: 8192
+    cp -f $HOME/.ipfs/config $HOME/.ipfs/config.bak
+    sed -i 's|\("Gateway": \)"/ip4/.*/tcp/.*",|\1"/ip4/0.0.0.0/tcp/8081",|g' $HOME/.ipfs/config # avoid port conflict with boostd
 }
 
 function start_ipfs() {
@@ -234,7 +249,7 @@ function setup_wallets() {
     _echo "client lotus wallet address: $CLIENT_WALLET_ADDRESS, balance: $CLIENT_WALLET_BALANCE"
 }
 
-function build {
+function build_config_all {
     setup_ipfs
     start_ipfs
 
@@ -242,7 +257,7 @@ function build {
     init_singularity
     start_singularity
 
-    build_lotus
+    build_install_lotus
     init_daemons && sleep 10
 
     stop_daemons && sleep 2
@@ -252,15 +267,24 @@ function build {
     setup_wallets && sleep 5
 }
 
-function full_build_test() {
-    build
+function full_build_test_legacy() {
+    build_config_all
     test_singularity
 }
 
-function run() {
-    full_build_test
+function full_build_test_boost() {
+    setup_ipfs
+    start_ipfs
+    install_singularity
+    init_singularity
+    start_singularity
+    setup_boost_devnet
 }
 
-# Execute function from parameters
-# cd $HOME
-$@
+function run() {
+    export BOOST_TEST_MODE=true
+    full_build_test_boost
+    # full_build_test_legacy
+}
+
+time $@ # Execute function with parameters
