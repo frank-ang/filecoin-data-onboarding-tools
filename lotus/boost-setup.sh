@@ -11,15 +11,15 @@ BOOST_PATH=$HOME/.boost
 # Main boost setup/test
 #######################
 function setup_boost_devnet() {
-    time build_lotus_devnet_for_boost && _echo "stage: build_lotus_devnet_for_boost completed"
-    time build_configure_boost_devnet && _echo "stage: build_configure_boost_devnet completed"
+    time build_lotus_devnet_for_boost && _echo "stage: build_lotus_devnet_for_boost completed"  # 4m11s
+    time build_configure_boost_devnet && _echo "stage: build_configure_boost_devnet completed" #5m24s
     boost init # client
     fund_wallets
     start_ipfs
     start_singularity && sleep 10
     # trigger a plain boost deal, somehow avoids miner sealing failure: WARN	sectors	pipeline/fsm.go:792	sector 1 got error event sealing.SectorCommitFailed: proof validation failed, sector not found in sector set after cron
-    time test_boost_deal && _echo "stage: test_boost_deal completed"
-    time test_singularity_boost && _echo "stage: test_singularity_boost completed"
+    time test_boost_deal && _echo "stage: test_boost_deal completed" # 4m5s
+    time test_singularity_boost && _echo "stage: test_singularity_boost completed" # 7m5.152s
 }
 
 #######
