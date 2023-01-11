@@ -1,5 +1,4 @@
 #!/bin/bash
-#!/bin/bash
 # Create random test files.
 # Examples, 
 # * create 10 test files of 1KB size
