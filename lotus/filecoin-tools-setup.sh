@@ -147,7 +147,7 @@ function stop_daemons() {
 
 function start_singularity() {
     _echo "Starting singularity daemon..."
-    nohup singularity daemon >> /var/log/singularity.log 2>&1 &
+    nohup FULLNODE_API_INFO="http://localhost/rpc/v0" singularity daemon >> /var/log/singularity.log 2>&1 &
     _echo "Awaiting singularity start..."
     sleep 12
     timeout 1m bash -c 'until singularity prep list; do sleep 5; done'
@@ -167,11 +167,15 @@ function install_singularity() {
     rm -rf $HOME/.singularity
     _echo "cloning singularity repo..."
     cd $HOME
-    git clone https://github.com/tech-greedy/singularity.git
-    _echo "deploying hacky patch to DealReplicationWorker.ts for devnet blockheight."
-    cp -f filecoin-data-onboarding-tools/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
+    # git clone https://github.com/tech-greedy/singularity.git TODO restore after Singularity devnet PR merge.
+    git clone https://github.com/frank-ang/singularity.git # test PR.
+    # TODO REMOVE # _echo "deploying hacky patch to DealReplicationWorker.ts for devnet blockheight."
+    # TODO REMOVE # cp -f filecoin-data-onboarding-tools/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
     _echo "building singularity..."
     cd singularity
+    git fetch --all
+    git checkout frank-ang/devnet-wip
+
     npm ci
     npm run build
     npm link
@@ -255,10 +259,11 @@ function build_config_all {
 
     install_singularity
     init_singularity
-    start_singularity
 
     build_install_lotus
     init_daemons && sleep 10
+
+    start_singularity && sleep 2
 
     stop_daemons && sleep 2
     deploy_miner_config
