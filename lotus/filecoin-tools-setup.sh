@@ -147,7 +147,14 @@ function stop_daemons() {
 
 function start_singularity() {
     _echo "Starting singularity daemon..."
-    nohup FULLNODE_API_INFO="http://localhost/rpc/v0" singularity daemon >> /var/log/singularity.log 2>&1 &
+    ORIGINAL_FULLNODE_API_INFO="$FULLNODE_API_INFO"
+    export FULLNODE_API_INFO="http://localhost:1234/rpc/v0"
+    nohup singularity daemon >> /var/log/singularity.log 2>&1 &
+    if [[ -z "$ORIGINAL_FULLNODE_API_INFO" ]]; then
+        unset FULLNODE_API_INFO
+    else
+        export FULLNODE_API_INFO="$ORIGINAL_FULLNODE_API_INFO"
+    fi
     _echo "Awaiting singularity start..."
     sleep 12
     timeout 1m bash -c 'until singularity prep list; do sleep 5; done'
