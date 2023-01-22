@@ -62,7 +62,7 @@ static_path = "./cars"
 
 [deal_tracking_service]
 enabled = false
-lotus_api = "https://api.node.glif.io/rpc/v0"
+lotus_api = "http://localhost:1234/rpc/v0"
 lotus_token = ""
 
 [deal_replication_service]
