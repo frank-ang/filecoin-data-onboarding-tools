@@ -263,7 +263,7 @@ function test_singularity_boost() {
     _echo "Testing Singularity with Boost ..."
     . $TEST_CONFIG_FILE
     reset_test_data
-    generate_test_files "1" "1024"
+    generate_test_files "10" "1024"
     test_singularity_prep
     test_singularity_repl
     wait_singularity_manifest

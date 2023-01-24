@@ -58,7 +58,13 @@ deploy_script:
 	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/boost-setup.sh /root/filecoin-data-onboarding-tools/lotus/"
 #	scp lotus/miner-import-car.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/
 #	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/miner-import-car.sh /root/filecoin-data-onboarding-tools/lotus/"
-
+# retrieval scripts.
+#	scp lotus/fil-ls ubuntu@${AWS_APPLIANCE_IP}:/tmp/
+#	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/fil-ls /root/filecoin-data-onboarding-tools/lotus/"
+#	scp lotus/fil-cp ubuntu@${AWS_APPLIANCE_IP}:/tmp/
+#	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/fil-cp /root/filecoin-data-onboarding-tools/lotus/"
+#	scp lotus/fil-explain ubuntu@${AWS_APPLIANCE_IP}:/tmp/
+#	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/fil-explain /root/filecoin-data-onboarding-tools/lotus/"
 
 connect_boost: start_tunnel
 	@echo "Connecting to Boost UX: ${AWS_APPLIANCE_IP}:8080"

@@ -18,8 +18,8 @@ MINER_IMPORT_SCRIPT=$(dirname $(realpath $0))"/miner-import-car.sh"
 # generates and sets a random DATASET_NAME
 # Params: FILE_COUNT, FILE_SIZE
 function generate_test_files() {
-    FILE_COUNT=${1:-1}
-    FILE_SIZE=${2:-1024}
+    local FILE_COUNT="${1:-1}"
+    local FILE_SIZE="${2:-1024}"
     DIRNAME=${3:-"$DATA_SOURCE_ROOT"}
     export DATASET_NAME=`uuidgen | cut -d'-' -f1`
     DATASET_SOURCE_DIR=$DIRNAME/$DATASET_NAME
@@ -300,7 +300,7 @@ function test_singularity() {
     _echo "test_singularity starting..."
     . $TEST_CONFIG_FILE
     reset_test_data
-    generate_test_files "10" "1024" # "10" "1" ok # "5" "512" failed? # generate_test_files "1" "1024"
+    generate_test_files 11 1024 # "10" "1" ok # "5" "512" failed? # generate_test_files "1" "1024"
     test_singularity_prep
     test_singularity_repl
     wait_singularity_manifest
