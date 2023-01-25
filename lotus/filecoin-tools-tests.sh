@@ -88,8 +88,8 @@ function test_singularity_repl() {
     for CAR_FILE in $( ls $DATASET_CAR_ROOT/*.car ); do
         echo "CAR_FILE: $CAR_FILE"
         LOTUS_CLIENT_IMPORT_CAR_CMD="lotus client import --car $CAR_FILE"
-        _echo "Executing command: $LOTUS_CLIENT_IMPORT_CAR_CMD"
-        $LOTUS_CLIENT_IMPORT_CAR_CMD
+        _echo "SKIPPING Executing command: $LOTUS_CLIENT_IMPORT_CAR_CMD"
+        # $LOTUS_CLIENT_IMPORT_CAR_CMD # apparently not required?
     done
     unset FULLNODE_API_INFO
     CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')

@@ -287,9 +287,12 @@ function full_build_test_boost() {
 }
 
 function run() {
+    # INSTRUCTION: Adjust accordingly.
     export BOOST_TEST_MODE=true
-    full_build_test_boost
-    # full_build_test_legacy
+
+    # INSTRUCTION: Enable only one of the following.
+    #full_build_test_boost
+    full_build_test_legacy
 }
 
 time $@ # Execute function with parameters
