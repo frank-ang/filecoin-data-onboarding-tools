@@ -2,14 +2,14 @@
 # Run as root. Execute from filecoin-tools-setup.sh instead of this script directly.
 # To execute a full install and test. Recommend run headless via nohup or tmux.
 
-export DATA_SOURCE_ROOT=/tmp/source
+. $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions and constants
+
 export DATA_CAR_ROOT=/tmp/car
 export CAR_RETRIEVE_ROOT=/tmp/car-retrieve
 export RETRIEVE_ROOT=/tmp/retrieve
 export SINGULARITY_CSV_ROOT=/tmp/singularity-csv
 TARGET_DEAL_SIZE="2KiB" # devnet. For prod use: "32GiB"
 
-. $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
 GEN_TEST_DATA_SCRIPT=$(dirname $(realpath $0))"/gen-test-data.sh"
 MINER_IMPORT_SCRIPT=$(dirname $(realpath $0))"/miner-import-car.sh"
 
@@ -17,7 +17,7 @@ MINER_IMPORT_SCRIPT=$(dirname $(realpath $0))"/miner-import-car.sh"
 # Creates test data files with pattern: $DATA_SOURCE_ROOT/$DATASET_NAME/file-$FILE_COUNT
 # generates and sets a random DATASET_NAME
 # Params: FILE_COUNT, FILE_SIZE
-function generate_test_files() {
+function generate_test_files_DEPRECATED() {
     local FILE_COUNT="${1:-1}"
     local FILE_SIZE="${2:-1024}"
     DIRNAME=${3:-"$DATA_SOURCE_ROOT"}
@@ -88,8 +88,8 @@ function test_singularity_repl() {
     for CAR_FILE in $( ls $DATASET_CAR_ROOT/*.car ); do
         echo "CAR_FILE: $CAR_FILE"
         LOTUS_CLIENT_IMPORT_CAR_CMD="lotus client import --car $CAR_FILE"
-        _echo "SKIPPING Executing command: $LOTUS_CLIENT_IMPORT_CAR_CMD"
-        # $LOTUS_CLIENT_IMPORT_CAR_CMD # apparently not required?
+        _echo "Executing command: $LOTUS_CLIENT_IMPORT_CAR_CMD , pending Singularity bugfix https://github.com/tech-greedy/singularity/issues/177"
+        $LOTUS_CLIENT_IMPORT_CAR_CMD # remove when regular deal bug resolved: https://github.com/tech-greedy/singularity/issues/177
     done
     unset FULLNODE_API_INFO
     CURRENT_EPOCH=$(lotus status | sed -n 's/^Sync Epoch: \([0-9]\+\)[^0-9]*.*/\1/p')
@@ -300,7 +300,8 @@ function test_singularity() {
     _echo "test_singularity starting..."
     . $TEST_CONFIG_FILE
     reset_test_data
-    generate_test_files 11 1024 # "10" "1" ok # "5" "512" failed? # generate_test_files "1" "1024"
+    # generate_test_files_DEPRECATED 11 1024 # TODO Support subdirectories.
+    gen_test_data_case
     test_singularity_prep
     test_singularity_repl
     wait_singularity_manifest

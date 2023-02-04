@@ -41,6 +41,7 @@ export BOOST_TEST_MODE=false
 . $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
 . $(dirname $(realpath $0))"/filecoin-tools-tests.sh" # import test functions.
 . $(dirname $(realpath $0))"/boost-setup.sh" # import boost functions.
+. $(dirname $(realpath $0))"/gen-test-data.sh" # import data generator function.
 
 function build_install_lotus() {
     _echo "Rebuilding from source..."
