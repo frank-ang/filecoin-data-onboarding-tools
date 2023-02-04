@@ -6,6 +6,12 @@ console_level = 'info'
 file_level = 'debug'
 file_path = './logs'
 
+[s3]
+# The maximum number of retry count
+max_retry_count = 5
+# The concurrency per generation job
+per_job_concurrency = 4
+
 [connection]
 # Connection string to MongoDB, it can be either a built-in mongodb
 # shipped with this software or a standalone mongodb server
@@ -41,6 +47,8 @@ local_port = 37000
 enabled = true
 # Number of workers to start, one worker consumes 2 - 2.5 CPUs
 num_workers = 4
+# Buffer for child spawn
+max_buffer = 1073741824
 
 [index_service]
 enabled = true
