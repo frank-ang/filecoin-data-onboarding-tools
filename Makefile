@@ -1,13 +1,13 @@
 # AWS resources.
 SHELL=/bin/bash
-export AWS_DEFAULT_REGION=us-east-2
+export AWS_DEFAULT_REGION=ap-southeast-1
 
 STACK_NAME="filecoin-singularity-appliance-test"
 AWS_APPLIANCE_TEMPLATE=aws/filecoin-client-stack.cloudformation.yml
 AWS_APPLIANCE_INSTANCE_ID=$(shell aws cloudformation describe-stacks --stack-name ${STACK_NAME} --region ${AWS_DEFAULT_REGION} | jq -r '.Stacks[].Outputs[]|select(.OutputKey=="InstanceId").OutputValue')
 AWS_APPLIANCE_IP=$(shell aws ec2 describe-instances --instance-id ${AWS_APPLIANCE_INSTANCE_ID} --region ${AWS_DEFAULT_REGION} | jq -r '.Reservations[].Instances[].PublicIpAddress')
 
--include config.mk.ohio.gitignore
+-include config.mk.singapore.gitignore
 
 create_appliance:
 	@echo "Creating Singularity appliance AWS stack..."

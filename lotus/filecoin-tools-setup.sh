@@ -170,12 +170,10 @@ function install_singularity() {
     cd $HOME
     # git clone https://github.com/tech-greedy/singularity.git TODO restore after Singularity devnet PR merge.
     git clone https://github.com/frank-ang/singularity.git # test PR.
-    # TODO REMOVE # _echo "deploying hacky patch to DealReplicationWorker.ts for devnet blockheight."
-    # TODO REMOVE # cp -f filecoin-data-onboarding-tools/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
     _echo "building singularity..."
     cd singularity
     git fetch --all
-    git checkout frank-ang/devnet-wip
+    git checkout frank-ang/devnet # TODO restore to main from tech-greedy.
 
     npm ci
     npm run build
