@@ -102,7 +102,7 @@ nohup ./filecoin-tools-setup.sh test_singularity >> test_singularity.log 2>&1 &
 Full rebuild and boost markets test.
 ```bash
 cd ./lotus
-nohup ./filecoin-tools-setup.sh full_build_test_boost >> /var/log/filecoin-tools-setup-boost.log 2>&1 &
+nohup ./filecoin-tools-setup.sh run >> /var/log/filecoin-tools-setup.log 2>&1 &
 ```
 
 For MacOS, to connect to remote Boost UX, open your local workstation shell terminal, and:

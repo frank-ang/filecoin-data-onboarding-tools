@@ -67,6 +67,3 @@ function gen_test_data_to_dir() {
         ((FILE_COUNT--))
     done
 }
-
-
-gen_test_data_case
