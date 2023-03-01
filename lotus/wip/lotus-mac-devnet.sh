@@ -440,7 +440,6 @@ function configure_devnet() {
     # NOTE mac has additional empty param to sed.
     sed -i '' 's/^[ ]*#EnableMarkets = true/EnableMarkets = false/' "$LOTUS_MINER_PATH""config.toml"
     sed -i '' 's|^[ ]*#ListenAddresses *= \[.*|ListenAddress = \["/ip4/0.0.0.0/tcp/50000", "/ip6/::/tcp/0"\]|' "$LOTUS_MINER_PATH""config.toml"
-
 }
 
 # Execute a function name from CLI parameters

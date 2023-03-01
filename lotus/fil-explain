@@ -1,6 +1,6 @@
 #!/bin/bash
 . ./test_config.gitignore
 [[ -z "$INDEX_ROOT_IPFS" ]] && { echo "INDEX_ROOT_IPFS is required"; exit 1; }
-CMD="singularity-retrieve ls --json -v singularity:/$INDEX_ROOT_IPFS/$1"
+CMD="singularity-retrieve explain --json singularity:/$INDEX_ROOT_IPFS/$1"
 # echo "$CMD"
 $CMD

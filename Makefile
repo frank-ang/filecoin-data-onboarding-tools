@@ -1,13 +1,13 @@
 # AWS resources.
 SHELL=/bin/bash
-export AWS_DEFAULT_REGION=us-east-2
+export AWS_DEFAULT_REGION=ap-southeast-1
 
 STACK_NAME="filecoin-singularity-appliance-test"
 AWS_APPLIANCE_TEMPLATE=aws/filecoin-client-stack.cloudformation.yml
 AWS_APPLIANCE_INSTANCE_ID=$(shell aws cloudformation describe-stacks --stack-name ${STACK_NAME} --region ${AWS_DEFAULT_REGION} | jq -r '.Stacks[].Outputs[]|select(.OutputKey=="InstanceId").OutputValue')
 AWS_APPLIANCE_IP=$(shell aws ec2 describe-instances --instance-id ${AWS_APPLIANCE_INSTANCE_ID} --region ${AWS_DEFAULT_REGION} | jq -r '.Reservations[].Instances[].PublicIpAddress')
 
--include config.mk.ohio.gitignore
+-include config.mk.singapore.gitignore
 
 create_appliance:
 	@echo "Creating Singularity appliance AWS stack..."
@@ -58,7 +58,13 @@ deploy_script:
 	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/boost-setup.sh /root/filecoin-data-onboarding-tools/lotus/"
 #	scp lotus/miner-import-car.sh ubuntu@${AWS_APPLIANCE_IP}:/tmp/
 #	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/miner-import-car.sh /root/filecoin-data-onboarding-tools/lotus/"
-
+# retrieval scripts.
+#	scp lotus/fil-ls ubuntu@${AWS_APPLIANCE_IP}:/tmp/
+#	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/fil-ls /root/filecoin-data-onboarding-tools/lotus/"
+#	scp lotus/fil-cp ubuntu@${AWS_APPLIANCE_IP}:/tmp/
+#	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/fil-cp /root/filecoin-data-onboarding-tools/lotus/"
+#	scp lotus/fil-explain ubuntu@${AWS_APPLIANCE_IP}:/tmp/
+#	ssh ubuntu@${AWS_APPLIANCE_IP} "sudo mv -f /tmp/fil-explain /root/filecoin-data-onboarding-tools/lotus/"
 
 connect_boost: start_tunnel
 	@echo "Connecting to Boost UX: ${AWS_APPLIANCE_IP}:8080"

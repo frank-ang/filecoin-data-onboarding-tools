@@ -1,5 +1,8 @@
 #!/bin/bash
-# Common functions.
+# Common functions and constants.
+export DATA_SOURCE_ROOT=/tmp/source
+export ROOT_SCRIPT_PATH="$HOME/filecoin-data-onboarding-tools"
+export TEST_CONFIG_FILE="$ROOT_SCRIPT_PATH/lotus/test_config.gitignore"
 
 if [[ -z "$HOME" ]]; then
     echo "HOME undefined." 1>&2

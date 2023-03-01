@@ -51,6 +51,8 @@ function build_lotus_devnet_for_boost() {
     sleep 1
     _echo "Lotus installed complete. Lotus version: "
     lotus --version
+    go install github.com/ipld/go-car/cmd/car@latest
+
 }
 
 
@@ -154,6 +156,7 @@ function add_funds_boost_wallets() {
     lotus wallet default
 }
 
+# copied from boost/docker/devnet/boost/entrypoint.sh
 function init_boost_repo() {
     _echo "Init boost on first run ..."
     boostd -vv init \
@@ -163,7 +166,10 @@ function init_boost_repo() {
     --wallet-deal-collateral=$COLLAT_WALLET \
     --max-staging-deals-bytes=2000000000
     _echo "Setting port in boost config..."
-	sed -i 's|ip4/0.0.0.0/tcp/0|ip4/0.0.0.0/tcp/50000|g' $HOME/.boost/config.toml
+	sed -i 's|ip4/0.0.0.0/tcp/0|ip4/0.0.0.0/tcp/50000|g' $BOOST_PATH/config.toml
+    touch $BOOST_PATH/.init.boost
+    # Hack from boost devnet docker entrypoint.sh
+    mkdir -p $BOOST_PATH/deal-staging
 }
 
 function setup_maddr() {
@@ -175,7 +181,7 @@ function setup_maddr() {
         BOOST_PID=`echo $!`
         echo Got boost PID = $BOOST_PID
 
-        until cat $BOOST_PATH/boostd.log | grep maddr; do echo "Waiting for boost..."; sleep 1; done
+        until cat $BOOST_PATH/boostd.log | grep maddr; do echo "Waiting for boost..."; sleep 10; done # TODO fail if timeout
         echo Looks like boost started and initialized...
         
         echo Registering to lotus-miner...
@@ -263,7 +269,7 @@ function test_singularity_boost() {
     _echo "Testing Singularity with Boost ..."
     . $TEST_CONFIG_FILE
     reset_test_data
-    generate_test_files "1" "1024"
+    generate_test_files_DEPRECATED "10" "1024"
     test_singularity_prep
     test_singularity_repl
     wait_singularity_manifest

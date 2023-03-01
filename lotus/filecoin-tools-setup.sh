@@ -35,12 +35,13 @@ export NVM_DIR="$HOME/.nvm"
 . "$NVM_DIR/bash_completion"
 export MINERID="t01000"
 
-# toggles stuff
+# toggles boost or legacy lotus market
 export BOOST_TEST_MODE=false
 
 . $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
 . $(dirname $(realpath $0))"/filecoin-tools-tests.sh" # import test functions.
 . $(dirname $(realpath $0))"/boost-setup.sh" # import boost functions.
+. $(dirname $(realpath $0))"/gen-test-data.sh" # import data generator function.
 
 function build_install_lotus() {
     _echo "Rebuilding from source..."
@@ -66,7 +67,9 @@ function build_install_lotus() {
     _echo "Installing lotus..."
     sudo make install
     install -C ./lotus-seed /usr/local/bin/lotus-seed
-    _echo "Lotus installed complete. Lotus version: "`lotus --version`
+    _echo "Lotus installed complete. Lotus version: "
+    lotus --version
+    go install github.com/ipld/go-car/cmd/car@latest
 }
 
 function init_daemons() {
@@ -168,10 +171,11 @@ function install_singularity() {
     _echo "cloning singularity repo..."
     cd $HOME
     git clone https://github.com/tech-greedy/singularity.git
-    _echo "deploying hacky patch to DealReplicationWorker.ts for devnet blockheight."
-    cp -f filecoin-data-onboarding-tools/singularity/DealReplicationWorker.ts singularity/src/replication/DealReplicationWorker.ts
+    # git clone https://github.com/frank-ang/singularity.git # TODO remove this.
     _echo "building singularity..."
     cd singularity
+    # git fetch --all  # TODO remove this.
+    # git checkout frank-ang/devnet # TODO remove this.
     npm ci
     npm run build
     npm link
@@ -255,10 +259,11 @@ function build_config_all {
 
     install_singularity
     init_singularity
-    start_singularity
 
     build_install_lotus
     init_daemons && sleep 10
+
+    start_singularity && sleep 2
 
     stop_daemons && sleep 2
     deploy_miner_config
@@ -282,9 +287,12 @@ function full_build_test_boost() {
 }
 
 function run() {
+    # INSTRUCTION: Adjust accordingly.
     export BOOST_TEST_MODE=true
+
+    # INSTRUCTION: Enable only one of the following.
     full_build_test_boost
-    # full_build_test_legacy
+    #full_build_test_legacy
 }
 
 time $@ # Execute function with parameters

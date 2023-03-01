@@ -6,6 +6,12 @@ console_level = 'info'
 file_level = 'debug'
 file_path = './logs'
 
+[s3]
+# The maximum number of retry count
+max_retry_count = 5
+# The concurrency per generation job
+per_job_concurrency = 4
+
 [connection]
 # Connection string to MongoDB, it can be either a built-in mongodb
 # shipped with this software or a standalone mongodb server
@@ -14,6 +20,7 @@ database = "mongodb://127.0.0.1:37000"
 # Connection string to deal preparation service, used by Singularity CLI
 deal_preparation_service = 'http://127.0.0.1:7001'
 deal_replication_service = 'http://127.0.0.1:7004'
+deal_self_service = 'http://127.0.0.1:7005'
 
 # Connection string to index service, used by Singularity CLI
 index_service = 'http://127.0.0.1:7003'
@@ -41,6 +48,8 @@ local_port = 37000
 enabled = true
 # Number of workers to start, one worker consumes 2 - 2.5 CPUs
 num_workers = 4
+# Buffer for child spawn
+max_buffer = 1073741824
 
 [index_service]
 enabled = true
@@ -62,13 +71,18 @@ static_path = "./cars"
 
 [deal_tracking_service]
 enabled = false
-lotus_api = "https://api.node.glif.io/rpc/v0"
+lotus_api = "http://localhost:1234/rpc/v0"
 lotus_token = ""
 
 [deal_replication_service]
 enabled = true
 bind = "0.0.0.0"
 port = 7004
+
+[deal_self_service]
+enabled = true
+bind = "0.0.0.0"
+port = 7005
 
 [deal_replication_worker]
 enabled = true
