@@ -35,7 +35,7 @@ export NVM_DIR="$HOME/.nvm"
 . "$NVM_DIR/bash_completion"
 export MINERID="t01000"
 
-# toggles stuff
+# toggles boost or legacy lotus market
 export BOOST_TEST_MODE=false
 
 . $(dirname $(realpath $0))"/filecoin-tools-common.sh" # import common functions.
@@ -67,7 +67,9 @@ function build_install_lotus() {
     _echo "Installing lotus..."
     sudo make install
     install -C ./lotus-seed /usr/local/bin/lotus-seed
-    _echo "Lotus installed complete. Lotus version: "`lotus --version`
+    _echo "Lotus installed complete. Lotus version: "
+    lotus --version
+    go install github.com/ipld/go-car/cmd/car@latest
 }
 
 function init_daemons() {
@@ -168,13 +170,12 @@ function install_singularity() {
     rm -rf $HOME/.singularity
     _echo "cloning singularity repo..."
     cd $HOME
-    # git clone https://github.com/tech-greedy/singularity.git TODO restore after Singularity devnet PR merge.
-    git clone https://github.com/frank-ang/singularity.git # test PR.
+    git clone https://github.com/tech-greedy/singularity.git
+    # git clone https://github.com/frank-ang/singularity.git # TODO remove this.
     _echo "building singularity..."
     cd singularity
-    git fetch --all
-    git checkout frank-ang/devnet # TODO restore to main from tech-greedy.
-
+    # git fetch --all  # TODO remove this.
+    # git checkout frank-ang/devnet # TODO remove this.
     npm ci
     npm run build
     npm link
@@ -290,8 +291,8 @@ function run() {
     export BOOST_TEST_MODE=true
 
     # INSTRUCTION: Enable only one of the following.
-    #full_build_test_boost
-    full_build_test_legacy
+    full_build_test_boost
+    #full_build_test_legacy
 }
 
 time $@ # Execute function with parameters

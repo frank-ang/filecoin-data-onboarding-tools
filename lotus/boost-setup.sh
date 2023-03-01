@@ -51,6 +51,8 @@ function build_lotus_devnet_for_boost() {
     sleep 1
     _echo "Lotus installed complete. Lotus version: "
     lotus --version
+    go install github.com/ipld/go-car/cmd/car@latest
+
 }
 
 

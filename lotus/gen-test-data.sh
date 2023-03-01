@@ -40,7 +40,7 @@ function gen_test_data_case() {
     rm -rf $DATASET_SOURCE_DIR && mkdir -p $DATASET_SOURCE_DIR
     echo "Generating test files for dataset: $DATASET_NAME, output:$DATASET_SOURCE_DIR"
     gen_test_data_to_dir 10 1 "$DATASET_SOURCE_DIR"
-    gen_test_data_to_dir 20 1 "$DATASET_SOURCE_DIR/folder1"
+    gen_test_data_to_dir 10 1 "$DATASET_SOURCE_DIR/folder1"
     gen_test_data_to_dir 30 1 "$DATASET_SOURCE_DIR/folder1.1"
     gen_test_data_to_dir 40 1 "$DATASET_SOURCE_DIR/folder1.2"
     gen_test_data_to_dir 50 1 "$DATASET_SOURCE_DIR/folder2"
