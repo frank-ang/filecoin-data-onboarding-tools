@@ -156,6 +156,7 @@ function wait_miner_receive_deal() {
     while [[ "$DEAL_STATUS" != "StorageDealWaitingForData" && $MAX_POLL_RETRY -ge 0 ]]; do
         MAX_POLL_SECS=$(( $MAX_POLL_SECS - $SLEEP_INTERVAL ))
         if [ $MAX_POLL_SECS -eq 0 ]; then _error "Timeout exceeded waiting for miner to receive deal: $DEAL_CID."; fi
+        # TODO fix error when using boost: ERROR: fatal error calling 'Filecoin.MarketListIncompleteDeals': panic in rpc method 'Filecoin.MarketListIncompleteDeals': runtime error: invalid memory address or nil pointer dereference
         DEAL_STATUS=$( lotus-miner storage-deals list -v | grep $DEAL_CID | tr -s ' ' | cut -d ' ' -f7 )
         _echo "Deal:$DEAL_CID , status:$DEAL_STATUS"
         if [[ "$DEAL_STATUS" == "StorageDealWaitingForData" || "$DEAL_STATUS" == "StorageDealActive" ]]; then break; fi
