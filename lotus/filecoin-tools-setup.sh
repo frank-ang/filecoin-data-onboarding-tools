@@ -2,8 +2,7 @@
 # Main install/configure script.
 # Also, use this script to invoke test functions.
 # Run as root.
-# E.g. via nohup or tmux:
-#         ./filecoin-tools-setup.sh full_rebuild_test >> ./full_rebuild_test.out 2>&1 &
+#         nohup ./filecoin-tools-setup.sh run >> ./full_rebuild_test.out 2>&1 &
 # Build Lotus devnet from source, configure, run devnet
 # Based on: 
 # https://lotus.filecoin.io/lotus/install/linux/#building-from-source
@@ -260,7 +259,11 @@ function build_config_all {
     install_singularity
     init_singularity
 
-    build_install_lotus
+    if [ -z ${SKIP_LOTUS_REBUILD+x} ]; then # set env variable SKIP_LOTUS_REBUILD to skip,.
+        build_install_lotus
+    else
+        _echo "skipping lotus rebuild to save time.";
+    fi
     init_daemons && sleep 10
 
     start_singularity && sleep 2
